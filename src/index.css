@@ -193,6 +193,8 @@ main::-webkit-scrollbar {
               opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1),
               margin 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
+  contain: content;
+  will-change: grid-template-rows, opacity;
 }
 .accordion-grid.open {
   grid-template-rows: 1fr;

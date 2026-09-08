@@ -101,6 +101,20 @@ export default function App() {
   const messagesEndRef = useRef(null);
   const isAutoScrollLocked = useRef(true);
 
+  const conversationsRef = useRef(conversations);
+  const activeIdRef = useRef(activeId);
+  const selectedModelRef = useRef(selectedModel);
+  const agentTraceModeRef = useRef(agentTraceMode);
+  const isLoadingRef = useRef(isLoading);
+
+  useEffect(() => {
+    conversationsRef.current = conversations;
+    activeIdRef.current = activeId;
+    selectedModelRef.current = selectedModel;
+    agentTraceModeRef.current = agentTraceMode;
+    isLoadingRef.current = isLoading;
+  });
+
   // Sync activeId with loaded conversations
   useEffect(() => {
     if (!activeId || !conversations.some(c => c.id === activeId)) {
@@ -110,12 +124,33 @@ export default function App() {
     }
   }, [conversations, activeId]);
 
-  // Persist conversations to localStorage
+  // Safe LocalStorage Persistence with Quota Safety & Base64 Compression
   useEffect(() => {
     try {
-      localStorage.setItem('devnexes_conversations', JSON.stringify(conversations));
+      // Create a lightweight sanitized copy of conversations for storage
+      const sanitized = conversations.slice(0, 20).map(conv => ({
+        ...conv,
+        messages: conv.messages.slice(-30).map(msg => {
+          // If image is a huge data URL (> 50KB), compress reference or keep lightweight thumbnail
+          if (msg.image && typeof msg.image === 'string' && msg.image.length > 50000) {
+            return { ...msg, image: msg.image.slice(0, 50000) + '...' };
+          }
+          return msg;
+        })
+      }));
+      localStorage.setItem('devnexes_conversations', JSON.stringify(sanitized));
     } catch (e) {
-      console.warn('Failed to save conversations to storage:', e);
+      console.warn('LocalStorage quota limit reached. Pruning oldest conversation:', e);
+      try {
+        // Fallback: save only active and last 3 conversations without images
+        const minimal = conversations.slice(0, 5).map(c => ({
+          ...c,
+          messages: c.messages.slice(-15).map(m => ({ ...m, image: null }))
+        }));
+        localStorage.setItem('devnexes_conversations', JSON.stringify(minimal));
+      } catch (err) {
+        console.error('Failed to save minimal conversations:', err);
+      }
     }
   }, [conversations]);
 
@@ -147,16 +182,17 @@ export default function App() {
   const [showScrollBottom, setShowScrollBottom] = useState(false);
 
   // Handle user scroll detection
-  const handleChatScroll = () => {
+  const handleChatScroll = useCallback(() => {
     if (!chatContainerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-    // Auto-scroll stays enabled if user is within 180px of bottom
-    isAutoScrollLocked.current = distanceFromBottom < 180;
-    setShowScrollBottom(distanceFromBottom > 200);
-  };
+    // Auto-scroll stays enabled only if user is within 120px of bottom
+    const isNearBottom = distanceFromBottom < 120;
+    isAutoScrollLocked.current = isNearBottom;
+    setShowScrollBottom(distanceFromBottom > 160);
+  }, []);
 
-  const scrollToBottom = (smooth = true) => {
+  const scrollToBottom = useCallback((smooth = true) => {
     if (chatContainerRef.current) {
       if (smooth) {
         chatContainerRef.current.scrollTo({
@@ -172,16 +208,16 @@ export default function App() {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'end' });
     }
-  };
+  }, []);
 
-  const scrollToBottomInstant = () => {
+  const scrollToBottomInstant = useCallback(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'auto', block: 'end' });
     }
-  };
+  }, []);
 
   // Bulletproof live Auto-scroll: tracks all DOM height expansions (streaming tokens, steps reveal)
   useEffect(() => {
@@ -206,37 +242,53 @@ export default function App() {
   useEffect(() => {
     if (!chatContainerRef.current) return;
     const container = chatContainerRef.current;
-    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    
-    if (isAutoScrollLocked.current || (isLoading && distanceFromBottom < 300)) {
+    if (isAutoScrollLocked.current) {
       container.scrollTop = container.scrollHeight;
     }
   }, [conversations, isLoading]);
 
   const activeConv = conversations.find(c => c.id === activeId) || conversations[0];
 
-  const handleSelectConv = (id) => setActiveId(id);
+  const handleSelectConv = useCallback((id) => setActiveId(id), []);
 
-  const handleNewChat = () => {
+  const handleNewChat = useCallback(() => {
     const newConv = createInitialConversation();
     setConversations(prev => [newConv, ...prev]);
     setActiveId(newConv.id);
     setGreetingIndex(prev => (prev + 1) % DYNAMIC_GREETINGS.length);
-  };
+  }, []);
 
-  const handleDeleteConv = (id) => {
-    if (conversations.length <= 1) return;
-    const remaining = conversations.filter(c => c.id !== id);
-    setConversations(remaining);
-    if (activeId === id) setActiveId(remaining[0].id);
-  };
+  const handleDeleteConv = useCallback((id) => {
+    setConversations(prev => {
+      if (prev.length <= 1) return prev;
+      const remaining = prev.filter(c => c.id !== id);
+      if (activeIdRef.current === id) setActiveId(remaining[0].id);
+      return remaining;
+    });
+  }, []);
 
-  const handleOpenPreview = (code, title) => {
+  const handleOpenPreview = useCallback((code, title) => {
     setPreviewModal({ isOpen: true, code, title });
-  };
+  }, []);
 
-  const handleSendMessage = async (userText, userImage = null) => {
-    if ((!userText?.trim() && !userImage) || isLoading) return;
+  const handleToggleTheme = useCallback(() => {
+    setIsDarkMode(prev => !prev);
+  }, []);
+
+  const handleToggleCollapse = useCallback(() => {
+    setIsSidebarCollapsed(prev => !prev);
+  }, []);
+
+  const handleOpenApiKeyModal = useCallback(() => {
+    setIsApiKeyModalOpen(true);
+  }, []);
+
+  const handleToggleAgentTraceMode = useCallback(() => {
+    setAgentTraceMode(prev => !prev);
+  }, []);
+
+  const handleSendMessage = useCallback(async (userText, userImage = null) => {
+    if ((!userText?.trim() && !userImage) || isLoadingRef.current) return;
 
     const key = getGroqApiKey();
     if (!key) { setIsApiKeyModalOpen(true); return; }
@@ -251,11 +303,11 @@ export default function App() {
     setTimeout(scrollToBottomInstant, 100);
     setTimeout(scrollToBottomInstant, 250);
 
-    const convId = activeId;
+    const convId = activeIdRef.current;
     const userMsgId = `user-${Date.now()}`;
     const assistantMsgId = `asst-${Date.now()}`;
 
-    const currentConv = conversations.find(c => c.id === convId);
+    const currentConv = conversationsRef.current.find(c => c.id === convId);
     const historyBeforeSend = currentConv ? currentConv.messages : [];
 
     // Add user message with image attached if present
@@ -270,7 +322,7 @@ export default function App() {
 
     setIsLoading(true);
 
-    if (agentTraceMode) {
+    if (agentTraceModeRef.current) {
       // Add placeholder for pipeline response
       setConversations(prev => prev.map(c => {
         if (c.id !== convId) return c;
@@ -294,7 +346,7 @@ export default function App() {
         await generateDynamicAgentPipeline({
           userPrompt: promptToSend,
           userImage: userImage,
-          model: selectedModel,
+          model: selectedModelRef.current,
           apiKey: key,
           messagesHistory: historyBeforeSend,
           onStepUpdate: (steps, isGreeting) => {
@@ -398,7 +450,7 @@ export default function App() {
             })),
             { role: 'user', content: userMsgPayload }
           ],
-          model: selectedModel,
+          model: selectedModelRef.current,
           apiKey: key,
           onChunk: (_, fullText) => {
             setConversations(prev => prev.map(c => {
@@ -427,7 +479,7 @@ export default function App() {
         setIsLoading(false);
       }
     }
-  };
+  }, [scrollToBottomInstant]);
 
   return (
     <div className={`flex h-[100dvh] max-h-[100dvh] w-full max-w-full font-sans overflow-hidden ${isDarkMode ? 'bg-[#080b14] text-slate-100' : 'bg-[#f8fafc] text-slate-900'}`}>
@@ -442,11 +494,11 @@ export default function App() {
         selectedModel={selectedModel}
         onSelectModel={setSelectedModel}
         hasApiKey={hasApiKey}
-        onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
+        onOpenApiKeyModal={handleOpenApiKeyModal}
         isDarkMode={isDarkMode}
-        onToggleTheme={() => setIsDarkMode(!isDarkMode)}
+        onToggleTheme={handleToggleTheme}
         isCollapsed={isSidebarCollapsed}
-        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        onToggleCollapse={handleToggleCollapse}
       />
 
       {/* Main workspace */}

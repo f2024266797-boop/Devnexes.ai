@@ -43,28 +43,46 @@ export function formatConversationHistoryWithIndices(messagesHistory = []) {
 function safeExtractJson(text) {
   if (!text) return null;
   const str = text.trim();
+
   // 1. Direct JSON parse
   try {
     return JSON.parse(str);
   } catch (e) {}
 
-  // 2. Remove markdown code fences
+  // 2. Remove markdown code fences & strip leading/trailing commentary
   const cleaned = str
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/```\s*$/i, '')
+    .replace(/```json\s*/gi, '')
+    .replace(/```\s*/g, '')
     .trim();
   try {
     return JSON.parse(cleaned);
   } catch (e) {}
 
-  // 3. Extract JSON object substring
-  const firstOpen = str.indexOf('{');
-  const lastClose = str.lastIndexOf('}');
-  if (firstOpen !== -1 && lastClose !== -1 && lastClose > firstOpen) {
-    const candidate = str.substring(firstOpen, lastClose + 1);
+  // 3. Extract JSON object {...} or array [...]
+  const firstCurly = cleaned.indexOf('{');
+  const lastCurly = cleaned.lastIndexOf('}');
+  const firstSquare = cleaned.indexOf('[');
+  const lastSquare = cleaned.lastIndexOf(']');
+
+  let candidates = [];
+  if (firstCurly !== -1 && lastCurly > firstCurly) {
+    candidates.push(cleaned.substring(firstCurly, lastCurly + 1));
+  }
+  if (firstSquare !== -1 && lastSquare > firstSquare) {
+    candidates.push(cleaned.substring(firstSquare, lastSquare + 1));
+  }
+
+  for (const candidate of candidates) {
     try {
       return JSON.parse(candidate);
+    } catch (e) {}
+
+    // 4. Sanitize trailing commas and strip JS comments
+    try {
+      const sanitized = candidate
+        .replace(/,\s*([\]}])/g, '$1')
+        .replace(/\/\*[\s\S]*?\*\/|([^\\:]|^)\/\/.*$/gm, '$1');
+      return JSON.parse(sanitized);
     } catch (e) {}
   }
 

@@ -24,6 +24,7 @@ const RESILIENT_FALLBACK_MODELS = [
 ];
 
 let activeKeyIndex = 0;
+const keyCooldowns = new Map(); // key -> cooldownUntilTimestamp
 
 /**
  * Returns all configured Groq API keys from env variables and localStorage.
@@ -53,12 +54,25 @@ export function getAllGroqApiKeys() {
 }
 
 /**
- * Returns the currently active Groq API key from the pool.
+ * Mark a key as rate-limited with a 60-second cooldown.
+ */
+export function markKeyCooldown(key) {
+  if (!key) return;
+  keyCooldowns.set(key, Date.now() + 60000);
+}
+
+/**
+ * Returns the currently active Groq API key from the pool, prioritizing healthy non-cooldown keys.
  */
 export function getGroqApiKey() {
   const keys = getAllGroqApiKeys();
   if (keys.length === 0) return '';
-  return keys[activeKeyIndex % keys.length];
+  
+  const now = Date.now();
+  const healthyKeys = keys.filter(k => (keyCooldowns.get(k) || 0) < now);
+  const pool = healthyKeys.length > 0 ? healthyKeys : keys;
+  
+  return pool[activeKeyIndex % pool.length];
 }
 
 /**
@@ -138,9 +152,12 @@ export async function streamGroqChat({ messages, model = DEFAULT_MODEL, apiKey, 
           const errJson = await response.json().catch(() => ({}));
           const errMsg = errJson.error?.message || `HTTP ${response.status}`;
           console.warn(`[Groq Failover] Key #${keyIdx + 1} with ${currentModel} returned ${response.status}: ${errMsg}. Rotating to next API key...`);
+          if (response.status === 429 || response.status === 413) {
+            markKeyCooldown(keyToUse);
+          }
           activeKeyIndex = (keyIdx + 1) % availableKeys.length;
           lastError = new Error(errMsg);
-          continue; // Instantly try next key in the 5-key pool
+          continue; // Instantly try next key in the pool
         }
 
         // Successful connection: update active index to this working key

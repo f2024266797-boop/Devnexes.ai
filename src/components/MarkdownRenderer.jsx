@@ -53,7 +53,7 @@ function CodeBlock({ language, code }) {
   );
 }
 
-export default function MarkdownRenderer({ content }) {
+function MarkdownRenderer({ content }) {
   if (!content) return null;
 
   return (
@@ -161,3 +161,5 @@ export default function MarkdownRenderer({ content }) {
     </div>
   );
 }
+
+export default React.memo(MarkdownRenderer);
