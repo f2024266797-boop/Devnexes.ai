@@ -101,7 +101,8 @@ function ChatInput({
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
+      const targetHeight = Math.min(Math.max(textareaRef.current.scrollHeight, 64), 240);
+      textareaRef.current.style.height = `${targetHeight}px`;
     }
   }, [text]);
 
@@ -255,7 +256,7 @@ function ChatInput({
   const currentModelObj = AVAILABLE_MODELS.find(m => m.id === selectedModel) || AVAILABLE_MODELS[0];
 
   return (
-    <div className="px-3 sm:px-6 md:px-8 pb-3.5 sm:pb-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-1 sm:pt-1.5 w-full max-w-5xl xl:max-w-6xl 2xl:max-w-7xl mx-auto transition-all shrink-0 relative z-30">
+    <div className="px-3 sm:px-6 md:px-8 pb-3.5 sm:pb-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-1 sm:pt-1.5 w-full max-w-3xl mx-auto transition-all shrink-0 relative z-30">
 
       {/* Hidden file input for screenshot / image upload */}
       <input
@@ -310,7 +311,7 @@ function ChatInput({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`group relative flex flex-col rounded-2xl sm:rounded-3xl border transition-all duration-300 ease-out backdrop-blur-2xl ${
+        className={`group relative flex flex-col rounded-2xl sm:rounded-[24px] border transition-all duration-300 ease-out backdrop-blur-2xl ${
           isDragging ? 'ring-2 ring-[#0066FF] border-[#0066FF]' : ''
         } ${
           isDarkMode
@@ -413,7 +414,7 @@ function ChatInput({
           </div>
         )}
 
-        {/* Textarea */}
+        {/* Textarea — Perfectly proportioned vertically for comfortable typing */}
         <textarea
           ref={textareaRef}
           value={text}
@@ -421,8 +422,8 @@ function ChatInput({
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           placeholder="Message Devnexes AI..."
-          rows={1}
-          className={`w-full px-4 sm:px-5 pt-3.5 sm:pt-4 pb-2 bg-transparent resize-none border-0 focus:outline-none text-[15px] sm:text-[16px] leading-relaxed custom-scrollbar max-h-48 font-sans ${
+          rows={2}
+          className={`w-full px-4 sm:px-6 pt-3.5 sm:pt-4 pb-2 bg-transparent resize-none border-0 focus:outline-none text-[15px] sm:text-[16px] leading-relaxed custom-scrollbar min-h-[64px] sm:min-h-[72px] max-h-56 font-sans ${
             isDarkMode
               ? 'text-slate-100 placeholder:text-slate-500'
               : 'text-slate-900 placeholder:text-slate-400'

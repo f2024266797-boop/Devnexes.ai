@@ -840,7 +840,7 @@ export default function App() {
             ) : (
               /* Welcome / clean empty state perfectly balanced in upper-middle */
               <div className="flex-1 flex flex-col items-center justify-start pt-[14vh] sm:pt-[16vh] px-3.5 sm:px-6 pb-6 select-none overflow-y-auto">
-                <div className="w-full max-w-5xl xl:max-w-6xl space-y-4 sm:space-y-6 animate-fade-in">
+                <div className="w-full max-w-3xl mx-auto space-y-4 sm:space-y-6 animate-fade-in">
 
                   {/* Clean elegant typography heading */}
                   <div className="text-center pb-1 px-2">
@@ -867,7 +867,7 @@ export default function App() {
                   </div>
 
                   {/* Devnexes AI Brand & Sleek Capability Chips */}
-                  <div className="w-full max-w-5xl xl:max-w-6xl mx-auto px-3 sm:px-4 -mt-1 sm:-mt-2 flex items-center justify-between md:justify-end gap-2.5 sm:gap-3 select-none py-1">
+                  <div className="w-full max-w-3xl mx-auto px-3 sm:px-4 -mt-1 sm:-mt-2 flex items-center justify-between md:justify-end gap-2.5 sm:gap-3 select-none py-1">
                     
                     {/* Brand line - Grouped before the capability pills */}
                     <div className="flex items-center space-x-2 shrink-0 py-0.5 pr-1">

@@ -7,9 +7,9 @@ export const PRO_MODEL = 'llama-3.3-70b-versatile';
 export const VISION_MODEL = 'qwen/qwen3.6-27b';
 
 export const AVAILABLE_MODELS = [
-  { id: 'groq/compound-mini', name: 'Devnexes Fast' },
-  { id: 'llama-3.3-70b-versatile', name: 'Devnexes Pro (Llama 3.3 70B)' },
-  { id: 'openai/gpt-oss-120b', name: 'Devnexes Ultra' }
+  { id: 'groq/compound-mini', name: 'Groq Compound Mini' },
+  { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B' },
+  { id: 'openai/gpt-oss-120b', name: 'GPT-OSS 120B' }
 ];
 
 export const VISION_FALLBACK_MODELS = [
