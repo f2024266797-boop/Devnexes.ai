@@ -89,7 +89,7 @@ function ChatInput({ onSendMessage, isLoading, agentTraceMode, onToggleAgentTrac
   const canSend = (text.trim().length > 0 || !!attachedImage) && !isLoading;
 
   return (
-    <div className="px-3.5 sm:px-6 md:px-8 pb-3 sm:pb-4 pt-1 sm:pt-1.5 w-full max-w-3xl mx-auto transition-all">
+    <div className="px-3 sm:px-6 md:px-8 pb-3.5 sm:pb-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-1 sm:pt-1.5 w-full max-w-3xl mx-auto transition-all shrink-0">
 
       {/* Hidden file input for screenshot / image upload */}
       <input
@@ -102,7 +102,7 @@ function ChatInput({ onSendMessage, isLoading, agentTraceMode, onToggleAgentTrac
 
       {/* Attached Clarification / Quick Options Dock Above Chatbar */}
       {activeClarification && activeClarification.options && activeClarification.options.length > 0 && (
-        <div className="mb-2 p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl bg-white/95 dark:bg-[#0f1424]/95 border border-blue-200/90 dark:border-blue-900/70 shadow-sm animate-step-reveal backdrop-blur-md">
+        <div className="mb-2.5 p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-white/95 dark:bg-[#0f1424]/95 border border-blue-200/90 dark:border-blue-900/70 shadow-sm animate-step-reveal backdrop-blur-md">
           <div className="flex items-start space-x-2 mb-2">
             <div className="w-4.5 h-4.5 sm:w-5 sm:h-5 rounded-full bg-blue-100 dark:bg-blue-950 text-[#0066FF] dark:text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
               <HelpCircle size={12} />
@@ -176,8 +176,8 @@ function ChatInput({ onSendMessage, isLoading, agentTraceMode, onToggleAgentTrac
           isDragging ? 'ring-4 ring-blue-500 border-blue-500 bg-blue-50/20' : ''
         } ${
           isDarkMode
-            ? 'bg-[#0f1322]/95 border-slate-700/70 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.4)] hover:border-blue-500/80 hover:shadow-[0_8px_32px_-4px_rgba(0,102,255,0.28)] focus-within:border-[#0066FF] focus-within:ring-4 focus-within:ring-[#0066FF]/20 focus-within:shadow-[0_12px_44px_-6px_rgba(0,102,255,0.35)]'
-            : 'bg-white/95 border-slate-200/90 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.06)] hover:border-blue-400/80 hover:shadow-[0_8px_32px_-4px_rgba(0,102,255,0.18)] focus-within:border-[#0066FF] focus-within:ring-4 focus-within:ring-[#0066FF]/15 focus-within:shadow-[0_12px_44px_-6px_rgba(0,102,255,0.22)]'
+            ? 'bg-[#0f1322]/98 border-slate-700/80 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.5)] hover:border-blue-500/80 focus-within:border-[#0066FF] focus-within:ring-4 focus-within:ring-[#0066FF]/20'
+            : 'bg-white/98 border-slate-300/90 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.08)] hover:border-blue-400/80 focus-within:border-[#0066FF] focus-within:ring-4 focus-within:ring-[#0066FF]/15'
         }`}
       >
 
@@ -220,7 +220,7 @@ function ChatInput({ onSendMessage, isLoading, agentTraceMode, onToggleAgentTrac
           placeholder={attachedImage ? "Add an instruction (e.g. 'explain this error', 'convert to React', etc.)..." : "Ask anything or paste/upload a screenshot..."}
           rows={1}
           disabled={isLoading}
-          className={`w-full bg-transparent border-0 focus:outline-none px-3.5 sm:px-5 pt-3 sm:pt-4 pb-1.5 text-[13px] sm:text-base leading-relaxed resize-none no-scrollbar min-h-[44px] sm:min-h-[54px] ${
+          className={`w-full bg-transparent border-0 focus:outline-none px-3.5 sm:px-5 pt-3 sm:pt-3.5 pb-1 text-[13px] sm:text-base leading-relaxed resize-none no-scrollbar min-h-[44px] sm:min-h-[52px] ${
             isDarkMode
               ? 'text-slate-100 placeholder-slate-500'
               : 'text-slate-900 placeholder-slate-400'
@@ -229,45 +229,45 @@ function ChatInput({ onSendMessage, isLoading, agentTraceMode, onToggleAgentTrac
         />
 
         {/* Bottom toolbar */}
-        <div className="flex items-center justify-between px-2.5 sm:px-4 pb-2 sm:pb-2.5 pt-0.5">
+        <div className="flex items-center justify-between px-3 sm:px-4 pb-2.5 sm:pb-3 pt-0.5">
 
           {/* Left toolbar items: Image Upload & AI Reasoning mode toggle */}
-          <div className="flex items-center space-x-1 sm:space-x-2">
+          <div className="flex items-center space-x-1.5 sm:space-x-2">
             {/* Image / Screenshot Upload Button */}
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className={`flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-medium transition-all duration-200 border cursor-pointer ${
+              className={`flex items-center space-x-1 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-medium transition-all duration-200 border cursor-pointer shrink-0 ${
                 attachedImage
                   ? 'bg-blue-100 dark:bg-blue-950/80 border-blue-400 text-[#0066FF] dark:text-blue-300 shadow-2xs'
                   : isDarkMode
-                    ? 'border-slate-700/80 text-slate-400 hover:text-slate-200 hover:border-slate-600 hover:bg-slate-800/60'
-                    : 'border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300 hover:bg-slate-100/80'
+                    ? 'border-slate-700/80 bg-slate-850 text-slate-300 hover:text-slate-100 hover:border-slate-600 hover:bg-slate-800'
+                    : 'border-slate-200/90 bg-slate-50 text-slate-600 hover:text-slate-900 hover:border-slate-300 hover:bg-slate-100'
               }`}
               title="Upload image or screenshot (or paste via Ctrl+V)"
             >
-              <ImageIcon size={12} className={attachedImage ? 'text-[#0066FF]' : ''} />
-              <span className="hidden xs:inline">{attachedImage ? 'Attached' : 'Attach'}</span>
+              <ImageIcon size={13} className={attachedImage ? 'text-[#0066FF]' : 'text-slate-500 dark:text-slate-400'} />
+              <span>{attachedImage ? 'Attached' : 'Attach Image'}</span>
             </button>
 
             {/* AI Reasoning mode toggle */}
             <button
               type="button"
               onClick={onToggleAgentTraceMode}
-              className={`group/btn flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-medium transition-all duration-200 border cursor-pointer ${
+              className={`group/btn flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-medium transition-all duration-200 border cursor-pointer shrink-0 ${
                 agentTraceMode
                   ? isDarkMode
-                    ? 'bg-blue-950/70 border-blue-700/70 text-blue-300 shadow-xs hover:bg-blue-900/60'
-                    : 'bg-blue-50/90 border-blue-200 text-blue-600 shadow-xs hover:bg-blue-100/80'
+                    ? 'bg-blue-950/80 border-blue-600 text-blue-300 shadow-xs hover:bg-blue-900/60'
+                    : 'bg-blue-50 border-blue-300 text-blue-600 shadow-xs hover:bg-blue-100/80'
                   : isDarkMode
-                    ? 'border-slate-700/80 text-slate-500 hover:text-slate-300 hover:border-slate-600'
-                    : 'border-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-300'
+                    ? 'border-slate-700/80 bg-slate-850 text-slate-400 hover:text-slate-200 hover:border-slate-600'
+                    : 'border-slate-200/90 bg-slate-50 text-slate-500 hover:text-slate-800 hover:border-slate-300'
               }`}
               title={agentTraceMode ? 'AI Reasoning Active' : 'Enable AI Reasoning'}
             >
               <img 
                 src="/devnexes-logo.png" 
-                className={`w-3 h-3 sm:w-3.5 sm:h-3.5 object-contain transition-transform duration-200 ${agentTraceMode ? 'scale-105' : 'grayscale opacity-70 group-hover/btn:grayscale-0 group-hover/btn:opacity-100'}`} 
+                className={`w-3.5 h-3.5 object-contain transition-transform duration-200 ${agentTraceMode ? 'scale-105' : 'grayscale opacity-70 group-hover/btn:grayscale-0 group-hover/btn:opacity-100'}`} 
                 alt="" 
               />
               <span>{agentTraceMode ? 'AI Reasoning' : 'Standard'}</span>
@@ -278,7 +278,7 @@ function ChatInput({ onSendMessage, isLoading, agentTraceMode, onToggleAgentTrac
           <button
             onClick={handleSubmit}
             disabled={!canSend}
-            className={`w-7.5 h-7.5 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer ${
+            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer shrink-0 ${
               canSend
                 ? 'bg-gradient-to-tr from-[#0052cc] to-[#0077ff] hover:from-[#0066FF] hover:to-[#2b8aff] text-white shadow-md shadow-blue-500/30 hover:scale-105 active:scale-95'
                 : isDarkMode
@@ -287,7 +287,7 @@ function ChatInput({ onSendMessage, isLoading, agentTraceMode, onToggleAgentTrac
             }`}
             title="Send message"
           >
-            <ArrowUp size={14} strokeWidth={canSend ? 2.5 : 2} />
+            <ArrowUp size={15} strokeWidth={canSend ? 2.5 : 2} />
           </button>
         </div>
       </div>

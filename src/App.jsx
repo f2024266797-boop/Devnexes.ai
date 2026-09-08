@@ -430,7 +430,7 @@ export default function App() {
   };
 
   return (
-    <div className={`flex h-screen w-full max-w-full font-sans overflow-hidden ${isDarkMode ? 'bg-[#080b14] text-slate-100' : 'bg-[#f8fafc] text-slate-900'}`}>
+    <div className={`flex h-[100dvh] max-h-[100dvh] w-full max-w-full font-sans overflow-hidden ${isDarkMode ? 'bg-[#080b14] text-slate-100' : 'bg-[#f8fafc] text-slate-900'}`}>
 
       {/* Sidebar */}
       <Sidebar
