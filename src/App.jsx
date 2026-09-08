@@ -6,153 +6,300 @@ import ApiKeyModal from './components/ApiKeyModal';
 import ArtifactModal from './components/ArtifactModal';
 import IdeCodePanel from './components/IdeCodePanel';
 import { getGroqApiKey, streamGroqChat, generateDynamicAgentPipeline, AVAILABLE_MODELS } from './services/groqService';
-
 import MarkdownRenderer from './components/MarkdownRenderer';
-import { Sparkles, Bot, AlertCircle, Key, RefreshCw, Code2 } from 'lucide-react';
+import {
+  AlertCircle,
+  Code2,
+  BookOpen,
+  PanelLeftOpen,
+  Cpu,
+  Layers,
+  Globe,
+  FileText,
+  Zap,
+  ArrowDown,
+  X
+} from 'lucide-react';
 
-// Real Initial Welcome State for Devnexes AI
-const INITIAL_DEMO_TRACE = {
-  id: 'devnexes-ai-welcome',
-  title: 'Devnexes AI Studio',
-  messages: [
-    {
-      id: 'msg-welcome-user',
-      role: 'user',
-      content: 'hi'
-    },
-    {
-      id: 'msg-welcome-assistant',
-      role: 'assistant',
-      isTrace: false,
-      content: 'Hello! Welcome to **Devnexes AI Agent Studio**. I can help you architect software, write C++, Python, Java, or React/HTML code, perform live web research, and debug complex applications. What would you like to build today?'
-    }
-  ]
-};
+const createInitialConversation = () => ({
+  id: `conv-${Date.now()}`,
+  title: 'New Chat',
+  messages: []
+});
+
+const DYNAMIC_GREETINGS = [
+  {
+    title: "What can I build for you today?",
+    subtitle: "Full-stack apps, modern web UI, scripts, or algorithms.",
+    chips: ["Create a Portfolio Website", "Build a Financial Dashboard", "Write a Python Script", "Latest AI Trends 2026"]
+  },
+  {
+    title: "How can I help you today?",
+    subtitle: "Real-time research, clean code, or technical architecture.",
+    chips: ["Design a Modern Landing Page", "Analyze Code & Find Bugs", "Compare Web Frameworks", "Write a Leave Letter"]
+  },
+  {
+    title: "Where should we start?",
+    subtitle: "Ask anything — from interactive apps to deep research.",
+    chips: ["Build a Weather App UI", "Create an E-commerce Card", "Explain Graph Algorithms", "Draft a Project Proposal"]
+  },
+  {
+    title: "What are you working on?",
+    subtitle: "Intelligent code generation, live search, and reasoning at your fingertips.",
+    chips: ["Create a Task Manager App", "Write a Professional Email", "Search Latest Tech News", "Generate SQL Schema"]
+  },
+  {
+    title: "Ready to innovate?",
+    subtitle: "Design stunning components or explore new creative ideas.",
+    chips: ["Build an Interactive Chart", "Implement Dark/Light Mode", "Research Emerging Tech", "Write an Algorithm"]
+  }
+];
+
+function cleanCodeContent(code) {
+  if (!code) return '';
+  return code
+    .replace(/^```[a-zA-Z0-9_-]*\n?/m, '')
+    .replace(/\n?```\s*$/m, '')
+    .trim();
+}
 
 export default function App() {
-  const [conversations, setConversations] = useState([INITIAL_DEMO_TRACE]);
-  const [activeId, setActiveId] = useState(INITIAL_DEMO_TRACE.id);
-  const [selectedModel, setSelectedModel] = useState(AVAILABLE_MODELS[0].id);
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [greetingIndex, setGreetingIndex] = useState(() => Math.floor(Math.random() * DYNAMIC_GREETINGS.length));
+  const currentGreeting = DYNAMIC_GREETINGS[greetingIndex] || DYNAMIC_GREETINGS[0];
+
+  const [conversations, setConversations] = useState(() => {
+    try {
+      const saved = localStorage.getItem('devnexes_conversations');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.warn('Failed to load saved conversations:', e);
+    }
+    return [createInitialConversation()];
+  });
+
+  const [activeId, setActiveId] = useState(() => {
+    const savedActive = localStorage.getItem('devnexes_active_id');
+    return savedActive || undefined;
+  });
+
+  const [selectedModel, setSelectedModel] = useState(() => {
+    return localStorage.getItem('devnexes_selected_model') || AVAILABLE_MODELS[0].id;
+  });
+
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const saved = localStorage.getItem('theme');
+    if (saved) return saved === 'dark';
+    return false; // Default to Light Theme as requested
+  });
   const [hasApiKey, setHasApiKey] = useState(!!getGroqApiKey());
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
   const [agentTraceMode, setAgentTraceMode] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
-
-  // Preview Modal & IDE Panel & Sidebar State
   const [previewModal, setPreviewModal] = useState({ isOpen: false, code: '', title: '' });
   const [idePanel, setIdePanel] = useState({ isOpen: false, code: '', title: '', language: '' });
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [selectedImageModal, setSelectedImageModal] = useState({ isOpen: false, url: '' });
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
 
   const chatContainerRef = useRef(null);
+  const messagesEndRef = useRef(null);
+  const isAutoScrollLocked = useRef(true);
 
-  // Dark mode effect
+  // Sync activeId with loaded conversations
+  useEffect(() => {
+    if (!activeId || !conversations.some(c => c.id === activeId)) {
+      if (conversations.length > 0) {
+        setActiveId(conversations[0].id);
+      }
+    }
+  }, [conversations, activeId]);
+
+  // Persist conversations to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('devnexes_conversations', JSON.stringify(conversations));
+    } catch (e) {
+      console.warn('Failed to save conversations to storage:', e);
+    }
+  }, [conversations]);
+
+  // Persist activeId to localStorage
+  useEffect(() => {
+    if (activeId) {
+      localStorage.setItem('devnexes_active_id', activeId);
+    }
+  }, [activeId]);
+
+  // Persist selected model to localStorage
+  useEffect(() => {
+    if (selectedModel) {
+      localStorage.setItem('devnexes_selected_model', selectedModel);
+    }
+  }, [selectedModel]);
+
+  // Theme synchronization
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
     } else {
       document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
     }
   }, [isDarkMode]);
 
-  // Scroll to bottom on new messages
-  useEffect(() => {
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
+
+  // Handle user scroll detection
+  const handleChatScroll = () => {
+    if (!chatContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    // Auto-scroll stays enabled if user is within 180px of bottom
+    isAutoScrollLocked.current = distanceFromBottom < 180;
+    setShowScrollBottom(distanceFromBottom > 200);
+  };
+
+  const scrollToBottom = (smooth = true) => {
+    if (chatContainerRef.current) {
+      if (smooth) {
+        chatContainerRef.current.scrollTo({
+          top: chatContainerRef.current.scrollHeight,
+          behavior: 'smooth'
+        });
+      } else {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      }
+      setShowScrollBottom(false);
+      isAutoScrollLocked.current = true;
+    }
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'end' });
+    }
+  };
+
+  const scrollToBottomInstant = () => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'auto', block: 'end' });
+    }
+  };
+
+  // Bulletproof live Auto-scroll: tracks all DOM height expansions (streaming tokens, steps reveal)
+  useEffect(() => {
+    if (!chatContainerRef.current) return;
+    const container = chatContainerRef.current;
+    
+    const resizeObserver = new ResizeObserver(() => {
+      if (isAutoScrollLocked.current) {
+        container.scrollTop = container.scrollHeight;
+      }
+    });
+
+    const innerDiv = container.querySelector('.messages-wrapper') || container.firstElementChild;
+    if (innerDiv) {
+      resizeObserver.observe(innerDiv);
+    }
+
+    return () => resizeObserver.disconnect();
+  }, [activeId, conversations.length]);
+
+  // Secondary reactive autoscroll on state updates & streaming
+  useEffect(() => {
+    if (!chatContainerRef.current) return;
+    const container = chatContainerRef.current;
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    
+    if (isAutoScrollLocked.current || (isLoading && distanceFromBottom < 300)) {
+      container.scrollTop = container.scrollHeight;
     }
   }, [conversations, isLoading]);
 
   const activeConv = conversations.find(c => c.id === activeId) || conversations[0];
 
-  const handleNewChat = () => {
-    const newId = `chat-${Date.now()}`;
-    const newChat = {
-      id: newId,
-      title: 'New Devnexes Pipeline',
-      messages: []
-    };
-    setConversations(prev => [newChat, ...prev]);
-    setActiveId(newId);
-  };
+  const handleSelectConv = (id) => setActiveId(id);
 
-  const handleSelectConv = (id) => {
-    setActiveId(id);
+  const handleNewChat = () => {
+    const newConv = createInitialConversation();
+    setConversations(prev => [newConv, ...prev]);
+    setActiveId(newConv.id);
+    setGreetingIndex(prev => (prev + 1) % DYNAMIC_GREETINGS.length);
   };
 
   const handleDeleteConv = (id) => {
-    setConversations(prev => prev.filter(c => c.id !== id));
-    if (activeId === id) {
-      const remaining = conversations.filter(c => c.id !== id);
-      if (remaining.length > 0) setActiveId(remaining[0].id);
-    }
+    if (conversations.length <= 1) return;
+    const remaining = conversations.filter(c => c.id !== id);
+    setConversations(remaining);
+    if (activeId === id) setActiveId(remaining[0].id);
   };
 
   const handleOpenPreview = (code, title) => {
     setPreviewModal({ isOpen: true, code, title });
   };
 
-  const handleSendMessage = async (userText) => {
-    if (!userText.trim()) return;
+  const handleSendMessage = async (userText, userImage = null) => {
+    if ((!userText?.trim() && !userImage) || isLoading) return;
 
     const key = getGroqApiKey();
-    if (!key) {
-      setIsApiKeyModalOpen(true);
-      return;
-    }
+    if (!key) { setIsApiKeyModalOpen(true); return; }
+
+    const promptToSend = userText?.trim() || 'Please analyze this screenshot / image in full detail.';
+
+    // Instant auto-scroll to bottom on message submission across frames
+    isAutoScrollLocked.current = true;
+    setShowScrollBottom(false);
+    scrollToBottomInstant();
+    setTimeout(scrollToBottomInstant, 30);
+    setTimeout(scrollToBottomInstant, 100);
+    setTimeout(scrollToBottomInstant, 250);
 
     const convId = activeId;
     const userMsgId = `user-${Date.now()}`;
-    const assistantMsgId = `assistant-${Date.now()}`;
+    const assistantMsgId = `asst-${Date.now()}`;
 
-    // Get current conversation history BEFORE appending new user prompt
     const currentConv = conversations.find(c => c.id === convId);
     const historyBeforeSend = currentConv ? currentConv.messages : [];
 
-    // Add user message
+    // Add user message with image attached if present
     setConversations(prev => prev.map(c => {
-      if (c.id === convId) {
-        return {
-          ...c,
-          title: c.messages.length === 0 ? userText.slice(0, 30) : c.title,
-          messages: [
-            ...c.messages,
-            { id: userMsgId, role: 'user', content: userText }
-          ]
-        };
-      }
-      return c;
+      if (c.id !== convId) return c;
+      return {
+        ...c,
+        title: c.messages.length === 0 ? (userImage ? '📸 Image Analysis' : promptToSend.slice(0, 32)) : c.title,
+        messages: [...c.messages, { id: userMsgId, role: 'user', content: promptToSend, image: userImage }]
+      };
     }));
 
     setIsLoading(true);
 
     if (agentTraceMode) {
-      // Add initial trace assistant placeholder
+      // Add placeholder for pipeline response
       setConversations(prev => prev.map(c => {
-        if (c.id === convId) {
-          return {
-            ...c,
-            messages: [
-              ...c.messages,
-              {
-                id: assistantMsgId,
-                role: 'assistant',
-                isTrace: true,
-                traceData: {
-                  steps: [
-                    { type: 'header', title: `Analyzing intent for "${userText}"...` }
-                  ]
-                }
-              }
-            ]
-          };
-        }
-        return c;
+        if (c.id !== convId) return c;
+        return {
+          ...c,
+          messages: [
+            ...c.messages,
+            {
+              id: assistantMsgId,
+              role: 'assistant',
+              isTrace: true,
+              traceData: { steps: [] }
+            }
+          ]
+        };
       }));
 
       try {
-        let hasArtifact = false;
+        let hasCode = false;
+
         await generateDynamicAgentPipeline({
-          userPrompt: userText,
+          userPrompt: promptToSend,
+          userImage: userImage,
           model: selectedModel,
           apiKey: key,
           messagesHistory: historyBeforeSend,
@@ -160,129 +307,128 @@ export default function App() {
             if (isGreeting) {
               const respContent = steps.find(s => s.type === 'response')?.content || '';
               setConversations(prev => prev.map(c => {
-                if (c.id === convId) {
-                  const updatedMsgs = c.messages.map(m => {
-                    if (m.id === assistantMsgId) {
-                      return { 
-                        ...m, 
-                        isTrace: false, 
-                        content: respContent 
-                      };
-                    }
-                    return m;
-                  });
-                  return { ...c, messages: updatedMsgs };
-                }
-                return c;
+                if (c.id !== convId) return c;
+                return {
+                  ...c,
+                  messages: c.messages.map(m =>
+                    m.id === assistantMsgId
+                      ? { ...m, isTrace: false, content: respContent }
+                      : m
+                  )
+                };
               }));
               return;
             }
 
-            const artStep = steps.find(s => s.type === 'artifact');
+            // Update code panel live
+            const artStep = steps.find(s => s.type === 'code' || s.type === 'artifact');
             if (artStep && artStep.code && artStep.code.trim()) {
-              hasArtifact = true;
+              hasCode = true;
+              const cleanCode = cleanCodeContent(artStep.code) || artStep.code;
               setIdePanel(prev => ({
                 ...prev,
-                code: artStep.code,
+                code: cleanCode,
                 title: artStep.title || prev.title,
                 language: artStep.language || prev.language
               }));
             }
 
             setConversations(prev => prev.map(c => {
-              if (c.id === convId) {
-                const updatedMsgs = c.messages.map(m => {
-                  if (m.id === assistantMsgId) {
-                    return { ...m, isTrace: true, traceData: { steps } };
-                  }
-                  return m;
-                });
-                return { ...c, messages: updatedMsgs };
-              }
-              return c;
+              if (c.id !== convId) return c;
+              return {
+                ...c,
+                messages: c.messages.map(m =>
+                  m.id === assistantMsgId
+                    ? { ...m, isTrace: true, traceData: { steps } }
+                    : m
+                )
+              };
             }));
           },
-          onError: (err) => {
-            console.error(err);
-          }
+          onError: (err) => console.error(err)
         });
 
-        // Pipeline execution finished: Open side Code Canvas Workbench ONLY IF artifact exists
-        if (hasArtifact) {
-          setIdePanel(ide => ({ ...ide, isOpen: true }));
+        // Auto-open code canvas when code is generated
+        if (hasCode) {
+          setIdePanel(prev => ({ ...prev, isOpen: true }));
         }
+
       } catch (err) {
         setConversations(prev => prev.map(c => {
-          if (c.id === convId) {
-            const updatedMsgs = c.messages.map(m => {
-              if (m.id === assistantMsgId) {
-                return {
-                  ...m,
-                  traceData: {
-                    steps: [
-                      { type: 'header', title: `Execution error for "${userText}"` },
-                      { type: 'response', content: `Error: ${err.message}` }
-                    ]
+          if (c.id !== convId) return c;
+          return {
+            ...c,
+            messages: c.messages.map(m =>
+              m.id === assistantMsgId
+                ? {
+                    ...m,
+                    traceData: {
+                      steps: [{ type: 'response', content: `Error: ${err.message}` }]
+                    }
                   }
-                };
-              }
-              return m;
-            });
-            return { ...c, messages: updatedMsgs };
-          }
-          return c;
+                : m
+            )
+          };
         }));
       } finally {
         setIsLoading(false);
       }
+
     } else {
-      // Standard chat mode
+      // Standard direct chat mode (supports vision via llama-3.2-11b-vision-preview)
       setConversations(prev => prev.map(c => {
-        if (c.id === convId) {
-          return {
-            ...c,
-            messages: [
-              ...c.messages,
-              { id: assistantMsgId, role: 'assistant', isTrace: false, content: '' }
-            ]
-          };
-        }
-        return c;
+        if (c.id !== convId) return c;
+        return {
+          ...c,
+          messages: [
+            ...c.messages,
+            { id: assistantMsgId, role: 'assistant', isTrace: false, content: '' }
+          ]
+        };
       }));
 
       try {
-        const chatMessages = [
-          ...historyBeforeSend.map(m => ({
-            role: m.role === 'user' ? 'user' : 'assistant',
-            content: m.content || (m.traceData?.steps?.find(s => s.type === 'response')?.content || '')
-          })).filter(m => m.content),
-          { role: 'user', content: userText }
-        ];
+        const userMsgPayload = userImage
+          ? [
+              { type: 'text', text: promptToSend },
+              { type: 'image_url', image_url: { url: userImage } }
+            ]
+          : promptToSend;
 
         await streamGroqChat({
-          messages: chatMessages,
+          messages: [
+            { role: 'system', content: 'You are Devnexes AI, a helpful AI assistant. Be clear and concise. If an image is provided, analyze its components, OCR text, and design thoroughly.' },
+            ...historyBeforeSend.slice(-6).map(m => ({
+              role: m.role === 'user' ? 'user' : 'assistant',
+              content: m.content || 'Responded to prompt'
+            })),
+            { role: 'user', content: userMsgPayload }
+          ],
           model: selectedModel,
           apiKey: key,
-          onChunk: (delta, fullText) => {
+          onChunk: (_, fullText) => {
             setConversations(prev => prev.map(c => {
-              if (c.id === convId) {
-                const updatedMsgs = c.messages.map(m => {
-                  if (m.id === assistantMsgId) {
-                    return { ...m, content: fullText };
-                  }
-                  return m;
-                });
-                return { ...c, messages: updatedMsgs };
-              }
-              return c;
+              if (c.id !== convId) return c;
+              return {
+                ...c,
+                messages: c.messages.map(m =>
+                  m.id === assistantMsgId ? { ...m, content: fullText } : m
+                )
+              };
             }));
           },
-          onError: (err) => {
-            console.error(err);
-          }
+          onError: (err) => console.error(err)
         });
       } catch (err) {
-        // Error handling
+        setConversations(prev => prev.map(c => {
+          if (c.id !== convId) return c;
+          return {
+            ...c,
+            messages: c.messages.map(m =>
+              m.id === assistantMsgId ? { ...m, content: `Error: ${err.message}` } : m
+            )
+          };
+        }));
       } finally {
         setIsLoading(false);
       }
@@ -290,9 +436,9 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-[#f8fafc] dark:bg-[#0b101d] text-slate-800 dark:text-slate-200 overflow-hidden font-sans">
-      
-      {/* Sidebar Component */}
+    <div className={`flex h-screen w-full max-w-full font-sans overflow-hidden ${isDarkMode ? 'bg-[#080b14] text-slate-100' : 'bg-[#f8fafc] text-slate-900'}`}>
+
+      {/* Sidebar */}
       <Sidebar
         conversations={conversations}
         activeId={activeId}
@@ -309,124 +455,270 @@ export default function App() {
         onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
       />
 
-      {/* Split Workspace Area (Devnexes AI Split Canvas Layout) */}
-      <div className="flex-1 flex h-full overflow-hidden relative">
-        
-        {/* Left Pane: Chat & Agent Trace Feed */}
-        <main className="flex-1 flex flex-col h-full overflow-hidden relative border-r border-slate-200 dark:border-slate-800/60">
-          
-          {/* Top Header Bar */}
-          <header className="h-14 border-b border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#080a0f] px-6 flex items-center justify-between shrink-0 z-10">
-            <div className="flex items-center space-x-3">
-              <img 
-                src="/devnexes-logo.png" 
-                alt="Devnexes AI Logo" 
-                className="w-6 h-6 object-contain animate-logo-float" 
-              />
-              <span className="text-xs font-bold text-slate-900 dark:text-white font-lustria">Devnexes AI</span>
-              <span className="text-[11px] font-mono font-semibold px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-[#0066FF] dark:text-blue-400 border border-blue-200 dark:border-blue-800/60">
-                {AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name || selectedModel}
-              </span>
-            </div>
+      {/* Main workspace */}
+      <div className="flex-1 flex h-full overflow-hidden w-full max-w-full min-w-0">
 
-            <div className="flex items-center space-x-3 text-xs">
+        {/* Chat pane */}
+        <main className={`flex-1 flex flex-col h-full overflow-hidden min-w-0 w-full max-w-full relative border-r ${isDarkMode ? 'border-slate-800/60' : 'border-slate-200'}`}>
+
+          {/* Header */}
+          <header className={`h-12 px-3 sm:px-4 flex items-center justify-between shrink-0 border-b ${isDarkMode ? 'border-slate-800/60 bg-[#080b14]/90' : 'border-slate-200 bg-white/90'} backdrop-blur-md z-10`}>
+
+            {/* Left: Mobile sidebar toggle + Brand logo & title */}
+            <div className="flex items-center space-x-2 truncate pr-2">
               <button
-                onClick={() => setIdePanel(prev => ({ ...prev, isOpen: !prev.isOpen }))}
-                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-[#0066FF] hover:bg-blue-700 text-white font-semibold shadow-xs transition-all hover:scale-105"
+                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer md:hidden"
+                title="Toggle Sidebar"
               >
-                <Code2 size={13} />
-                <span>{idePanel.isOpen ? 'Hide Code Canvas' : 'Devnexes Code Canvas'}</span>
+                <PanelLeftOpen size={17} />
               </button>
 
+              {isSidebarCollapsed ? (
+                /* When sidebar is collapsed: show brand logo and title */
+                <div className="flex items-center space-x-2 truncate">
+                  <img 
+                    src="/devnexes-logo.png" 
+                    alt="Devnexes AI" 
+                    className="w-6 h-6 object-contain shrink-0 animate-logo-float"
+                  />
+                  <div className="flex items-center space-x-1.5 truncate">
+                    <span className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white tracking-tight shrink-0">
+                      Devnexes AI
+                    </span>
+                    <span className="text-slate-300 dark:text-slate-700 text-xs hidden sm:inline">/</span>
+                    <span className={`text-xs font-medium truncate max-w-[120px] sm:max-w-[200px] md:max-w-xs hidden sm:inline ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+                      {activeConv?.title || 'New Chat'}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                /* When sidebar is open: show ONLY the conversation title (Zero Duplication) */
+                <div className="flex items-center space-x-2 truncate">
+                  <span className={`text-xs sm:text-sm font-semibold truncate max-w-[200px] sm:max-w-xs md:max-w-md ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>
+                    {activeConv?.title || 'New Chat'}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Right actions */}
+            <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
               {!hasApiKey && (
                 <button
                   onClick={() => setIsApiKeyModalOpen(true)}
-                  className="flex items-center space-x-1 text-blue-600 dark:text-blue-400 font-semibold hover:underline"
+                  className="flex items-center space-x-1 text-amber-600 dark:text-amber-400 font-medium px-2 sm:px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 text-[11px] sm:text-xs hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors cursor-pointer"
                 >
-                  <AlertCircle size={14} />
-                  <span>API Key Needed</span>
+                  <AlertCircle size={12} />
+                  <span className="hidden sm:inline">Set API Key</span>
                 </button>
               )}
+
+              {/* Book Icon Button for Code Canvas / Workspace */}
+              <button
+                onClick={() => setIdePanel(prev => ({ ...prev, isOpen: !prev.isOpen }))}
+                className={`p-1.5 sm:p-2 rounded-xl transition-all duration-200 cursor-pointer ${
+                  idePanel.isOpen
+                    ? 'bg-blue-100 dark:bg-blue-950/80 text-[#0066FF] dark:text-blue-400 ring-1 ring-blue-500/30 shadow-xs'
+                    : isDarkMode
+                      ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/80'
+                      : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
+                }`}
+                title={idePanel.isOpen ? "Close Code Canvas" : "Open Code Canvas"}
+              >
+                <BookOpen size={16} />
+              </button>
             </div>
           </header>
 
-          {/* Chat / Trace Stream Area */}
-          <div 
+          {/* Messages area or Centered Welcome Input */}
+          <div
             ref={chatContainerRef}
-            className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 space-y-6 custom-scrollbar"
+            onScroll={handleChatScroll}
+            className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar flex flex-col w-full max-w-full"
           >
             {activeConv && activeConv.messages.length > 0 ? (
-              activeConv.messages.map((msg) => (
-                <div key={msg.id} className="max-w-4xl mx-auto">
-                  {msg.role === 'user' ? (
-                    <div className="flex justify-end my-3">
-                      <div className="max-w-xl px-4 py-2.5 rounded-2xl bg-[#f0f5ff] dark:bg-[#141a29] text-slate-900 dark:text-slate-100 text-xs sm:text-sm leading-relaxed shadow-2xs border border-blue-200/80 dark:border-blue-900/60 font-medium">
-                        {msg.content}
+              <div className="messages-wrapper max-w-3xl w-full mx-auto px-2.5 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6 overflow-x-hidden">
+                {activeConv.messages.map((msg) => (
+                  <div key={msg.id} className="animate-bubble-in w-full max-w-full overflow-hidden">
+
+                    {msg.role === 'user' ? (
+                      /* User message — right aligned */
+                      <div className="flex justify-end w-full max-w-full">
+                        <div className={`max-w-[90%] sm:max-w-xl px-3.5 sm:px-4 py-2.5 rounded-2xl rounded-tr-sm text-xs sm:text-sm leading-relaxed shadow-xs border break-words ${isDarkMode ? 'bg-[#1a2035] border-blue-900/40 text-slate-100' : 'bg-blue-50 border-blue-100 text-slate-900'}`}>
+                          {msg.image && (
+                            <div
+                              onClick={() => setSelectedImageModal({ isOpen: true, url: msg.image })}
+                              className="mb-2 max-w-xs rounded-xl overflow-hidden border border-slate-300/80 dark:border-slate-700/80 bg-slate-900/10 dark:bg-black/40 cursor-pointer group relative"
+                              title="Click to zoom image"
+                            >
+                              <img src={msg.image} alt="User attachment" className="max-h-56 w-auto object-contain rounded-lg group-hover:scale-[1.02] transition-transform duration-200" />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center transition-colors">
+                                <span className="opacity-0 group-hover:opacity-100 px-2 py-1 rounded-md bg-black/70 text-white text-[10.5px] font-medium transition-opacity">Zoom</span>
+                              </div>
+                            </div>
+                          )}
+                          {msg.content}
+                        </div>
+                      </div>
+                    ) : (
+                      /* AI message — left aligned with icon */
+                      <div className="flex items-start space-x-2 sm:space-x-3 w-full max-w-full overflow-hidden">
+                        <div className="shrink-0 mt-0.5">
+                          <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full overflow-hidden flex items-center justify-center">
+                            <img
+                              src="/devnexes-logo.png"
+                              alt="Devnexes AI"
+                              className="w-full h-full object-contain animate-logo-float"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0 max-w-full overflow-hidden pt-0.5">
+                          {msg.isTrace ? (
+                            <AgentTraceTree
+                              traceData={msg.traceData}
+                              isExecuting={isLoading && activeConv.messages[activeConv.messages.length - 1]?.id === msg.id}
+                              onOpenPreview={handleOpenPreview}
+                              onOpenIdePanel={(code, title, language) => setIdePanel({ isOpen: true, code, title, language })}
+                              onSendMessage={handleSendMessage}
+                            />
+                          ) : (
+                            <div className="text-xs sm:text-sm leading-relaxed">
+                              <MarkdownRenderer content={msg.content} />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                  </div>
+                ))}
+
+                {/* Loading indicator */}
+                {isLoading && activeConv.messages[activeConv.messages.length - 1]?.role === 'user' && (
+                  <div className="flex items-center space-x-2.5 sm:space-x-3">
+                    <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center">
+                      <img src="/devnexes-logo.png" alt="Devnexes AI" className="w-full h-full object-contain animate-logo-float" />
+                    </div>
+                    <div className="flex space-x-1.5 px-3 py-2">
+                      {[0, 1, 2].map(i => (
+                        <div
+                          key={i}
+                          className="w-2 h-2 rounded-full bg-[#0066FF]/60 animate-bounce"
+                          style={{ animationDelay: `${i * 150}ms` }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div ref={messagesEndRef} />
+              </div>
+            ) : (
+              /* Welcome / empty state with centered ChatInput */
+              <div className="flex-1 flex flex-col items-center justify-center px-4 py-8 select-none">
+                <div className="w-full max-w-2xl space-y-6 sm:space-y-8 animate-fade-in">
+
+                  {/* Logo + greeting */}
+                  <div className="text-center space-y-3 sm:space-y-4">
+                    <div className="inline-flex items-center justify-center relative">
+                      <div className={`p-3 sm:p-3.5 rounded-2xl relative overflow-hidden border ${isDarkMode ? 'bg-slate-800/60 border-slate-700/50' : 'bg-white border-slate-200'} shadow-lg`}>
+                        <div className="absolute inset-0 pointer-events-none animate-mirror-shine bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+                        <img
+                          src="/devnexes-logo.png"
+                          alt="Devnexes AI"
+                          className="w-10 h-10 sm:w-12 sm:h-12 object-contain animate-logo-float relative z-10"
+                        />
                       </div>
                     </div>
-                  ) : (
-                    <div className="my-4 flex items-start space-x-3">
-                      <img 
-                        src="/devnexes-logo.png" 
-                        alt="Devnexes AI" 
-                        className="w-7 h-7 object-contain mt-1 shrink-0 animate-logo-float" 
-                      />
-                      <div className="flex-1 min-w-0">
-                        {msg.isTrace ? (
-                          <AgentTraceTree 
-                            traceData={msg.traceData} 
-                            isExecuting={isLoading && activeConv.messages[activeConv.messages.length - 1]?.id === msg.id}
-                            onOpenPreview={handleOpenPreview}
-                            onOpenIdePanel={(code, title, language) => setIdePanel({ isOpen: true, code, title, language })}
-                          />
-                        ) : (
-                          <div className="py-1 text-sm leading-relaxed text-slate-800 dark:text-slate-200">
-                            <MarkdownRenderer content={msg.content} />
-                          </div>
-                        )}
-                      </div>
+
+                    <div>
+                      <h1 className={`text-2xl sm:text-3xl font-semibold tracking-tight ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}>
+                        {currentGreeting.title}
+                      </h1>
+                      <p className={`mt-1.5 text-xs sm:text-sm ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                        {currentGreeting.subtitle}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Centered Chat Input */}
+                  <div className="w-full">
+                    <ChatInput
+                      onSendMessage={handleSendMessage}
+                      isLoading={isLoading}
+                      agentTraceMode={agentTraceMode}
+                      onToggleAgentTraceMode={() => setAgentTraceMode(!agentTraceMode)}
+                      isDarkMode={isDarkMode}
+                    />
+                  </div>
+
+                  {/* Dynamic Suggestion Chips */}
+                  {currentGreeting.chips && currentGreeting.chips.length > 0 && (
+                    <div className="flex flex-wrap items-center justify-center gap-2 pt-1 px-2 animate-fade-in">
+                      {currentGreeting.chips.map((chip, cIdx) => (
+                        <button
+                          key={cIdx}
+                          onClick={() => handleSendMessage(chip)}
+                          className={`text-xs px-3 py-1.5 rounded-xl border transition-all cursor-pointer select-none active:scale-95 ${
+                            isDarkMode
+                              ? 'bg-slate-800/50 hover:bg-slate-800 border-slate-700/60 text-slate-300 hover:text-white hover:border-blue-500/50'
+                              : 'bg-white hover:bg-blue-50/60 border-slate-200/90 text-slate-700 hover:text-[#0066FF] hover:border-blue-300 shadow-2xs'
+                          }`}
+                        >
+                          {chip}
+                        </button>
+                      ))}
                     </div>
                   )}
-                </div>
-              ))
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-4 pt-12">
-                <img 
-                  src="/devnexes-logo.png" 
-                  alt="Devnexes AI" 
-                  className="w-16 h-16 object-contain animate-logo-float drop-shadow-md" 
-                />
-                <div>
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white font-lustria">Devnexes AI Agent Studio</h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-normal">
-                    Ask a question or request code to see real-time skill routing, intent analysis, and code artifacts.
-                  </p>
-                </div>
-              </div>
-            )}
 
-            {isLoading && (
-              <div className="max-w-4xl mx-auto flex items-center space-x-2 text-xs text-[#0066FF] font-medium py-2">
-                <RefreshCw size={14} className="animate-spin" />
-                <span>Devnexes agent pipeline executing...</span>
+                </div>
               </div>
             )}
           </div>
 
-          {/* Input Bar */}
-          <ChatInput
-            onSendMessage={handleSendMessage}
-            isLoading={isLoading}
-            agentTraceMode={agentTraceMode}
-            onToggleAgentTraceMode={() => setAgentTraceMode(!agentTraceMode)}
-          />
+          {/* Floating Scroll to Bottom Arrow Button */}
+          {showScrollBottom && activeConv && activeConv.messages.length > 0 && (
+            <div className="absolute bottom-24 sm:bottom-28 left-1/2 -translate-x-1/2 z-30 animate-fade-in pointer-events-auto">
+              <button
+                onClick={scrollToBottom}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-medium border shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all cursor-pointer backdrop-blur-md ${
+                  isDarkMode
+                    ? 'bg-slate-900/90 text-slate-200 border-slate-700/80 hover:bg-slate-800'
+                    : 'bg-white/95 text-slate-700 border-slate-200/90 hover:bg-slate-50'
+                }`}
+                title="Scroll to bottom"
+              >
+                <ArrowDown size={13} className="text-[#0066FF] animate-bounce" />
+                <span>Scroll down</span>
+              </button>
+            </div>
+          )}
 
+          {/* Bottom Chat Input — shown when conversation has messages */}
+          {activeConv && activeConv.messages.length > 0 && (() => {
+            const lastMsg = activeConv.messages[activeConv.messages.length - 1];
+            const activeClarification = !isLoading && lastMsg?.isTrace
+              ? lastMsg?.traceData?.steps?.find(s => s.type === 'clarification' || s.clarification)?.clarification
+              : null;
+
+            return (
+              <ChatInput
+                onSendMessage={handleSendMessage}
+                isLoading={isLoading}
+                agentTraceMode={agentTraceMode}
+                onToggleAgentTraceMode={() => setAgentTraceMode(!agentTraceMode)}
+                isDarkMode={isDarkMode}
+                activeClarification={activeClarification}
+              />
+            );
+          })()}
         </main>
 
-        {/* Right Pane: Devnexes Code Canvas Workbench */}
+        {/* Code Canvas Panel */}
         <IdeCodePanel
           isOpen={idePanel.isOpen}
-          onClose={() => setIdePanel({ ...idePanel, isOpen: false })}
+          onClose={() => setIdePanel(prev => ({ ...prev, isOpen: false }))}
           code={idePanel.code}
           title={idePanel.title}
           language={idePanel.language}
@@ -435,21 +727,44 @@ export default function App() {
 
       </div>
 
-      {/* API Key Modal */}
+      {/* Modals */}
       <ApiKeyModal
         isOpen={isApiKeyModalOpen}
-        onClose={() => setIsApiKeyModalOpen(false)}
-        onSave={(key) => setHasApiKey(!!key)}
+        onClose={() => {
+          setIsApiKeyModalOpen(false);
+          setHasApiKey(!!getGroqApiKey());
+        }}
       />
 
-      {/* Artifact Preview Modal */}
       <ArtifactModal
         isOpen={previewModal.isOpen}
-        onClose={() => setPreviewModal({ ...previewModal, isOpen: false })}
+        onClose={() => setPreviewModal({ isOpen: false, code: '', title: '' })}
         code={previewModal.code}
         title={previewModal.title}
       />
 
+      {/* Lightbox Image Zoom Modal */}
+      {selectedImageModal.isOpen && (
+        <div 
+          onClick={() => setSelectedImageModal({ isOpen: false, url: '' })}
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in cursor-pointer select-none"
+        >
+          <div className="relative max-w-4xl max-h-[90vh] flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setSelectedImageModal({ isOpen: false, url: '' })}
+              className="absolute -top-11 right-0 p-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors cursor-pointer"
+              title="Close image"
+            >
+              <X size={18} />
+            </button>
+            <img
+              src={selectedImageModal.url}
+              alt="Enlarged screenshot preview"
+              className="max-h-[85vh] max-w-full rounded-2xl object-contain shadow-2xl border border-white/10"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
