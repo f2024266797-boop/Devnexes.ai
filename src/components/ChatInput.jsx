@@ -89,7 +89,7 @@ function ChatInput({ onSendMessage, isLoading, agentTraceMode, onToggleAgentTrac
   const canSend = (text.trim().length > 0 || !!attachedImage) && !isLoading;
 
   return (
-    <div className="px-3 sm:px-5 pb-4 sm:pb-5 pt-1.5 sm:pt-2 w-full max-w-4xl mx-auto transition-all">
+    <div className="px-3.5 sm:px-6 md:px-8 pb-3 sm:pb-4 pt-1 sm:pt-1.5 w-full max-w-3xl mx-auto transition-all">
 
       {/* Hidden file input for screenshot / image upload */}
       <input
@@ -102,16 +102,16 @@ function ChatInput({ onSendMessage, isLoading, agentTraceMode, onToggleAgentTrac
 
       {/* Attached Clarification / Quick Options Dock Above Chatbar */}
       {activeClarification && activeClarification.options && activeClarification.options.length > 0 && (
-        <div className="mb-2.5 p-3 sm:p-3.5 rounded-2xl bg-white/95 dark:bg-[#0f1424]/95 border border-blue-200/90 dark:border-blue-900/70 shadow-md animate-step-reveal backdrop-blur-md">
-          <div className="flex items-start space-x-2.5 mb-2.5">
-            <div className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-950 text-[#0066FF] dark:text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
-              <HelpCircle size={13} />
+        <div className="mb-2 p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl bg-white/95 dark:bg-[#0f1424]/95 border border-blue-200/90 dark:border-blue-900/70 shadow-sm animate-step-reveal backdrop-blur-md">
+          <div className="flex items-start space-x-2 mb-2">
+            <div className="w-4.5 h-4.5 sm:w-5 sm:h-5 rounded-full bg-blue-100 dark:bg-blue-950 text-[#0066FF] dark:text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
+              <HelpCircle size={12} />
             </div>
             <div>
               <p className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white leading-snug break-words">
                 {activeClarification.question || 'Please select an option or write your custom request:'}
               </p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="text-[10.5px] sm:text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                 Click an option below or type your custom instruction:
               </p>
             </div>
@@ -123,19 +123,19 @@ function ChatInput({ onSendMessage, isLoading, agentTraceMode, onToggleAgentTrac
                 key={i}
                 type="button"
                 onClick={() => onSendMessage(opt)}
-                className={`w-full text-left p-2.5 sm:p-3 rounded-xl text-xs font-medium border transition-all cursor-pointer flex items-center justify-between group active:scale-[0.99] ${
+                className={`w-full text-left p-2 sm:p-2.5 rounded-lg sm:rounded-xl text-[11.5px] sm:text-xs font-medium border transition-all cursor-pointer flex items-center justify-between group active:scale-[0.99] ${
                   isDarkMode
                     ? 'bg-[#141a2e] hover:bg-[#1a233d] border-slate-700/80 text-slate-200 hover:text-white hover:border-blue-500'
                     : 'bg-slate-50 hover:bg-blue-50/80 border-slate-200/90 text-slate-800 hover:text-[#0066FF] hover:border-blue-300 shadow-2xs'
                 }`}
               >
-                <div className="flex items-start space-x-2.5 min-w-0 pr-2">
-                  <span className="w-5 h-5 rounded-md text-[10.5px] font-mono font-bold flex items-center justify-center bg-blue-100 dark:bg-blue-950 text-[#0066FF] dark:text-blue-400 shrink-0 mt-0.5">
+                <div className="flex items-start space-x-2 min-w-0 pr-2">
+                  <span className="w-4.5 h-4.5 sm:w-5 sm:h-5 rounded-md text-[10px] sm:text-[10.5px] font-mono font-bold flex items-center justify-center bg-blue-100 dark:bg-blue-950 text-[#0066FF] dark:text-blue-400 shrink-0 mt-0.5">
                     {String.fromCharCode(65 + i)}
                   </span>
                   <span className="leading-snug break-words">{opt}</span>
                 </div>
-                <ArrowRight size={13} className="text-slate-400 group-hover:text-[#0066FF] group-hover:translate-x-0.5 transition-all shrink-0" />
+                <ArrowRight size={12} className="text-slate-400 group-hover:text-[#0066FF] group-hover:translate-x-0.5 transition-all shrink-0" />
               </button>
             ))}
 
@@ -147,21 +147,21 @@ function ChatInput({ onSendMessage, isLoading, agentTraceMode, onToggleAgentTrac
                   textareaRef.current.focus();
                 }
               }}
-              className={`w-full text-left p-2.5 sm:p-3 rounded-xl text-xs font-medium border border-dashed transition-all cursor-pointer flex items-center justify-between group ${
+              className={`w-full text-left p-2 sm:p-2.5 rounded-lg sm:rounded-xl text-[11.5px] sm:text-xs font-medium border border-dashed transition-all cursor-pointer flex items-center justify-between group ${
                 isDarkMode
                   ? 'bg-blue-950/20 hover:bg-blue-950/40 border-blue-500/40 text-blue-300 hover:text-blue-200'
                   : 'bg-blue-50/40 hover:bg-blue-50 border-blue-300 text-blue-700 hover:text-[#0066FF]'
               }`}
             >
-              <div className="flex items-center space-x-2.5 min-w-0 pr-2">
-                <span className="w-5 h-5 rounded-md text-[10.5px] font-mono font-bold flex items-center justify-center bg-blue-100 dark:bg-blue-950 text-[#0066FF] dark:text-blue-400 shrink-0">
+              <div className="flex items-center space-x-2 min-w-0 pr-2">
+                <span className="w-4.5 h-4.5 sm:w-5 sm:h-5 rounded-md text-[10px] sm:text-[10.5px] font-mono font-bold flex items-center justify-center bg-blue-100 dark:bg-blue-950 text-[#0066FF] dark:text-blue-400 shrink-0">
                   {String.fromCharCode(65 + activeClarification.options.length)}
                 </span>
-                <span className="leading-snug">
-                  Custom Recommendation (Type your own requirements in the chatbox below)...
+                <span className="leading-snug truncate">
+                  Custom Recommendation (Type in chatbox below)...
                 </span>
               </div>
-              <ArrowRight size={13} className="text-blue-500 group-hover:translate-x-0.5 transition-transform shrink-0" />
+              <ArrowRight size={12} className="text-blue-500 group-hover:translate-x-0.5 transition-transform shrink-0" />
             </button>
           </div>
         </div>
@@ -183,12 +183,12 @@ function ChatInput({ onSendMessage, isLoading, agentTraceMode, onToggleAgentTrac
 
         {/* Attached Image / Screenshot Preview Pill */}
         {attachedImage && (
-          <div className="mx-4 mt-3 p-1.5 pl-2 pr-2.5 rounded-xl bg-slate-100/90 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 flex items-center justify-between gap-2 max-w-sm animate-smooth-expand">
+          <div className="mx-3 sm:mx-4 mt-2.5 p-1.5 pl-2 pr-2.5 rounded-xl bg-slate-100/90 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 flex items-center justify-between gap-2 max-w-sm animate-smooth-expand">
             <div className="flex items-center space-x-2 min-w-0">
               <img
                 src={attachedImage.url}
                 alt="Attached preview"
-                className="w-8 h-8 rounded-lg object-cover shrink-0 border border-slate-300 dark:border-slate-600 bg-white"
+                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg object-cover shrink-0 border border-slate-300 dark:border-slate-600 bg-white"
               />
               <div className="min-w-0 truncate">
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate leading-tight">
@@ -217,27 +217,27 @@ function ChatInput({ onSendMessage, isLoading, agentTraceMode, onToggleAgentTrac
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder={attachedImage ? "Add an instruction (e.g. 'explain this error', 'convert to React code', etc.)..." : "Ask anything or paste/upload a screenshot..."}
+          placeholder={attachedImage ? "Add an instruction (e.g. 'explain this error', 'convert to React', etc.)..." : "Ask anything or paste/upload a screenshot..."}
           rows={1}
           disabled={isLoading}
-          className={`w-full bg-transparent border-0 focus:outline-none px-4 sm:px-5 pt-3.5 sm:pt-4.5 pb-2 text-sm sm:text-base leading-relaxed resize-none no-scrollbar min-h-[52px] sm:min-h-[58px] ${
+          className={`w-full bg-transparent border-0 focus:outline-none px-3.5 sm:px-5 pt-3 sm:pt-4 pb-1.5 text-[13px] sm:text-base leading-relaxed resize-none no-scrollbar min-h-[44px] sm:min-h-[54px] ${
             isDarkMode
               ? 'text-slate-100 placeholder-slate-500'
               : 'text-slate-900 placeholder-slate-400'
           }`}
-          style={{ maxHeight: '200px' }}
+          style={{ maxHeight: '180px' }}
         />
 
         {/* Bottom toolbar */}
-        <div className="flex items-center justify-between px-3 sm:px-4 pb-2.5 sm:pb-3 pt-1">
+        <div className="flex items-center justify-between px-2.5 sm:px-4 pb-2 sm:pb-2.5 pt-0.5">
 
           {/* Left toolbar items: Image Upload & AI Reasoning mode toggle */}
-          <div className="flex items-center space-x-1.5 sm:space-x-2">
+          <div className="flex items-center space-x-1 sm:space-x-2">
             {/* Image / Screenshot Upload Button */}
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className={`flex items-center space-x-1 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs font-medium transition-all duration-200 border cursor-pointer ${
+              className={`flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-medium transition-all duration-200 border cursor-pointer ${
                 attachedImage
                   ? 'bg-blue-100 dark:bg-blue-950/80 border-blue-400 text-[#0066FF] dark:text-blue-300 shadow-2xs'
                   : isDarkMode
@@ -246,15 +246,15 @@ function ChatInput({ onSendMessage, isLoading, agentTraceMode, onToggleAgentTrac
               }`}
               title="Upload image or screenshot (or paste via Ctrl+V)"
             >
-              <ImageIcon size={13} className={attachedImage ? 'text-[#0066FF]' : ''} />
-              <span className="hidden xs:inline">{attachedImage ? 'Image Attached' : 'Attach Image'}</span>
+              <ImageIcon size={12} className={attachedImage ? 'text-[#0066FF]' : ''} />
+              <span className="hidden xs:inline">{attachedImage ? 'Attached' : 'Attach'}</span>
             </button>
 
             {/* AI Reasoning mode toggle */}
             <button
               type="button"
               onClick={onToggleAgentTraceMode}
-              className={`group/btn flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs font-medium transition-all duration-200 border cursor-pointer ${
+              className={`group/btn flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-medium transition-all duration-200 border cursor-pointer ${
                 agentTraceMode
                   ? isDarkMode
                     ? 'bg-blue-950/70 border-blue-700/70 text-blue-300 shadow-xs hover:bg-blue-900/60'
@@ -267,7 +267,7 @@ function ChatInput({ onSendMessage, isLoading, agentTraceMode, onToggleAgentTrac
             >
               <img 
                 src="/devnexes-logo.png" 
-                className={`w-3.5 h-3.5 object-contain transition-transform duration-200 ${agentTraceMode ? 'scale-105' : 'grayscale opacity-70 group-hover/btn:grayscale-0 group-hover/btn:opacity-100'}`} 
+                className={`w-3 h-3 sm:w-3.5 sm:h-3.5 object-contain transition-transform duration-200 ${agentTraceMode ? 'scale-105' : 'grayscale opacity-70 group-hover/btn:grayscale-0 group-hover/btn:opacity-100'}`} 
                 alt="" 
               />
               <span>{agentTraceMode ? 'AI Reasoning' : 'Standard'}</span>
@@ -278,7 +278,7 @@ function ChatInput({ onSendMessage, isLoading, agentTraceMode, onToggleAgentTrac
           <button
             onClick={handleSubmit}
             disabled={!canSend}
-            className={`w-8.5 h-8.5 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer ${
+            className={`w-7.5 h-7.5 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer ${
               canSend
                 ? 'bg-gradient-to-tr from-[#0052cc] to-[#0077ff] hover:from-[#0066FF] hover:to-[#2b8aff] text-white shadow-md shadow-blue-500/30 hover:scale-105 active:scale-95'
                 : isDarkMode
@@ -287,15 +287,15 @@ function ChatInput({ onSendMessage, isLoading, agentTraceMode, onToggleAgentTrac
             }`}
             title="Send message"
           >
-            <ArrowUp size={16} strokeWidth={canSend ? 2.5 : 2} />
+            <ArrowUp size={14} strokeWidth={canSend ? 2.5 : 2} />
           </button>
         </div>
       </div>
 
       {/* Subtle bottom hint */}
-      <p className={`text-center text-[11px] mt-1.5 font-normal transition-colors ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>
+      <p className={`text-center text-[10.5px] sm:text-[11px] mt-1 sm:mt-1.5 font-normal transition-colors ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>
         <span className="hidden sm:inline">Press <span className="font-medium">Enter</span> to send · <span className="font-medium">Ctrl+V</span> to paste screenshot · <span className="font-medium">Shift+Enter</span> for newline</span>
-        <span className="sm:hidden text-[10.5px]">Powered by Devnexes AI</span>
+        <span className="sm:hidden text-[10px]">Powered by Devnexes AI</span>
       </p>
     </div>
   );

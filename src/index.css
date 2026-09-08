@@ -11,6 +11,7 @@
     overflow-x: hidden;
     position: relative;
     -webkit-text-size-adjust: 100%;
+    touch-action: pan-y;
   }
 
   body {
@@ -19,12 +20,12 @@
     background-color: #f8fafc;
     color: #0f172a;
     font-family: 'Inter', 'PT Sans', system-ui, -apple-system, sans-serif;
-    font-size: 14px;
-    line-height: 1.5;
+    font-size: 13.5px;
+    line-height: 1.48;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow-x: hidden;
-    overscroll-behavior: none;
+    overscroll-behavior-y: contain;
     touch-action: pan-y;
   }
 
@@ -42,7 +43,7 @@
 
   h1, h2, h3 {
     font-family: 'Inter', 'Lustria', serif;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.015em;
   }
 
   code, pre, .font-mono {

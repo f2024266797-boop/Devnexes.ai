@@ -8,27 +8,17 @@ import {
   Check,
   Play,
   CheckCircle2,
-  Minimize2,
-  Maximize2,
   RefreshCw,
-  Cpu,
   Code2,
-  Terminal,
-  Layers,
   Brain,
-  Server,
-  FileCode,
   Search,
   ExternalLink,
   Sparkles,
-  Zap,
   AlertTriangle,
-  GitBranch,
   ArrowRight,
   ShieldAlert,
   HelpCircle,
-  Eye,
-  Image as ImageIcon
+  Eye
 } from 'lucide-react';
 
 // ── Safe Favicon with Fallback Icon ─────────────────────────────
@@ -78,63 +68,63 @@ function ClarificationCard({ clarification, onSendMessage }) {
   const customOptionLetter = String.fromCharCode(65 + options.length);
 
   return (
-    <div className="my-2 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-blue-50/90 via-indigo-50/30 to-slate-50/90 dark:from-[#0c1224] dark:via-[#0f172a] dark:to-[#080d1a] border border-blue-200/90 dark:border-blue-900/60 shadow-xs animate-step-reveal">
-      <div className="flex items-start space-x-2.5 mb-3">
-        <div className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-950 text-[#0066FF] dark:text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
-          <HelpCircle size={13} />
+    <div className="my-1.5 p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl bg-gradient-to-br from-blue-50/90 via-indigo-50/30 to-slate-50/90 dark:from-[#0c1224] dark:via-[#0f172a] dark:to-[#080d1a] border border-blue-200/90 dark:border-blue-900/60 shadow-xs animate-step-reveal">
+      <div className="flex items-start space-x-2 mb-2">
+        <div className="w-4.5 h-4.5 sm:w-5 sm:h-5 rounded-full bg-blue-100 dark:bg-blue-950 text-[#0066FF] dark:text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
+          <HelpCircle size={12} />
         </div>
         <div>
           <h4 className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white leading-tight">
             {clarification.question || 'Please select an option to proceed:'}
           </h4>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+          <p className="text-[10.5px] sm:text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
             Click any option below or enter your own custom recommendation:
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-2 mt-2">
+      <div className="grid grid-cols-1 gap-1.5 mt-1.5">
         {options.map((opt, oIdx) => {
           const isChosen = selected === opt;
           return (
             <button
               key={oIdx}
               onClick={() => handleSelect(opt)}
-              className={`w-full text-left p-2.5 sm:p-3 rounded-xl border transition-all duration-200 flex items-center justify-between group cursor-pointer active:scale-[0.99] ${
+              className={`w-full text-left p-2 sm:p-2.5 rounded-lg sm:rounded-xl border transition-all duration-200 flex items-center justify-between group cursor-pointer active:scale-[0.99] ${
                 isChosen
                   ? 'bg-blue-100 dark:bg-blue-950 border-[#0066FF] ring-2 ring-blue-500/20 text-[#0066FF] dark:text-blue-300'
                   : 'bg-white hover:bg-blue-50/80 dark:bg-[#111728] dark:hover:bg-[#161f36] border-slate-200/80 hover:border-blue-400 dark:border-slate-800 dark:hover:border-blue-700 shadow-2xs hover:shadow-xs'
               }`}
             >
-              <div className="flex items-center space-x-2.5 min-w-0 pr-2">
-                <span className={`w-5 h-5 rounded-lg text-[10.5px] font-mono font-bold flex items-center justify-center shrink-0 ${
+              <div className="flex items-center space-x-2 min-w-0 pr-2">
+                <span className={`w-4.5 h-4.5 sm:w-5 sm:h-5 rounded-md sm:rounded-lg text-[10px] sm:text-[10.5px] font-mono font-bold flex items-center justify-center shrink-0 ${
                   isChosen
                     ? 'bg-[#0066FF] text-white'
                     : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 group-hover:bg-blue-100 dark:group-hover:bg-blue-950 group-hover:text-[#0066FF]'
                 }`}>
                   {String.fromCharCode(65 + oIdx)}
                 </span>
-                <span className="text-xs font-medium text-slate-800 dark:text-slate-200 group-hover:text-[#0066FF] dark:group-hover:text-blue-300 truncate">
+                <span className="text-[11.5px] sm:text-xs font-medium text-slate-800 dark:text-slate-200 group-hover:text-[#0066FF] dark:group-hover:text-blue-300 truncate">
                   {opt}
                 </span>
               </div>
-              <ArrowRight size={13} className="text-slate-400 group-hover:text-[#0066FF] group-hover:translate-x-0.5 transition-all shrink-0" />
+              <ArrowRight size={12} className="text-slate-400 group-hover:text-[#0066FF] group-hover:translate-x-0.5 transition-all shrink-0" />
             </button>
           );
         })}
 
         {/* Option D: Custom write-in recommendation input */}
-        <div className={`p-2.5 sm:p-3 rounded-xl border transition-all duration-200 ${
+        <div className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl border transition-all duration-200 ${
           isCustomActive 
             ? 'bg-white dark:bg-[#111728] border-[#0066FF] ring-2 ring-blue-500/20 shadow-xs' 
             : 'bg-white/80 dark:bg-[#111728]/80 border-slate-200/80 dark:border-slate-800'
         }`}>
-          <div className="flex items-center space-x-2.5 mb-1.5">
-            <span className="w-5 h-5 rounded-lg text-[10.5px] font-mono font-bold flex items-center justify-center shrink-0 bg-blue-100 dark:bg-blue-950 text-[#0066FF] dark:text-blue-400">
+          <div className="flex items-center space-x-2 mb-1">
+            <span className="w-4.5 h-4.5 sm:w-5 sm:h-5 rounded-md sm:rounded-lg text-[10px] sm:text-[10.5px] font-mono font-bold flex items-center justify-center shrink-0 bg-blue-100 dark:bg-blue-950 text-[#0066FF] dark:text-blue-400">
               {customOptionLetter}
             </span>
-            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-              Custom Recommendation / Apni marzi ka response likhein:
+            <span className="text-[11px] sm:text-xs font-medium text-slate-700 dark:text-slate-300 truncate">
+              Custom Recommendation / Custom response:
             </span>
           </div>
           <form onSubmit={handleCustomSubmit} className="flex items-center gap-1.5 mt-1">
@@ -145,19 +135,19 @@ function ClarificationCard({ clarification, onSendMessage }) {
               onBlur={() => !customText && setIsCustomActive(false)}
               onChange={(e) => setCustomText(e.target.value)}
               placeholder="Type your own custom requirements or style..."
-              className="flex-1 px-3 py-1.5 rounded-lg text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-[#0066FF]"
+              className="flex-1 px-2.5 py-1 rounded-lg text-[11.5px] sm:text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-[#0066FF]"
             />
             <button
               type="submit"
               disabled={!customText.trim()}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1 transition-all cursor-pointer shrink-0 ${
+              className={`px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-semibold flex items-center space-x-1 transition-all cursor-pointer shrink-0 ${
                 customText.trim()
                   ? 'bg-[#0066FF] hover:bg-blue-700 active:scale-95 text-white shadow-xs'
                   : 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
               }`}
             >
               <span>Submit</span>
-              <ArrowRight size={12} />
+              <ArrowRight size={11} />
             </button>
           </form>
         </div>
@@ -194,9 +184,9 @@ function StreamingCodeBox({ code, language, wrapCode = false }) {
       className="overflow-y-auto max-h-72 custom-scrollbar scroll-smooth w-full max-w-full min-w-0"
       style={{ overscrollBehaviorX: 'contain', touchAction: 'pan-x pan-y' }}
     >
-      <div className="flex p-3 font-mono text-[11.5px] leading-relaxed w-full max-w-full min-w-0 overflow-hidden">
+      <div className="flex p-2.5 sm:p-3 font-mono text-[11px] sm:text-[11.5px] leading-relaxed w-full max-w-full min-w-0 overflow-hidden">
         {/* Line numbers */}
-        <div className="shrink-0 select-none text-right pr-2.5 text-slate-400/60 dark:text-slate-600/80 font-mono text-[10.5px] leading-relaxed" style={{ minWidth: '1.8rem' }}>
+        <div className="shrink-0 select-none text-right pr-2 text-slate-400/60 dark:text-slate-600/80 font-mono text-[10px] sm:text-[10.5px] leading-relaxed" style={{ minWidth: '1.5rem' }}>
           {lines.map((_, i) => (
             <div key={i}>{i + 1}</div>
           ))}
@@ -214,38 +204,36 @@ function StreamingCodeBox({ code, language, wrapCode = false }) {
 function NodeStatusIcon({ status, type }) {
   if (status === 'running') {
     return (
-      <div className="w-4.5 h-4.5 sm:w-5 sm:h-5 rounded-full bg-blue-50 dark:bg-blue-950 border-1.5 sm:border-2 border-[#0066FF] flex items-center justify-center z-10 shadow-sm shadow-blue-500/20">
-        <RefreshCw size={8} className="text-[#0066FF] animate-spin sm:hidden" />
-        <RefreshCw size={10} className="text-[#0066FF] animate-spin hidden sm:block" />
+      <div className="w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full bg-blue-50 dark:bg-blue-950 border-1.5 sm:border-2 border-[#0066FF] flex items-center justify-center z-10 shadow-xs shadow-blue-500/20">
+        <RefreshCw size={8} className="text-[#0066FF] animate-spin" />
       </div>
     );
   }
   if (status === 'completed') {
     return (
-      <div className="w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full bg-slate-100 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 flex items-center justify-center z-10">
-        <Check size={8} className="text-slate-600 dark:text-slate-300 sm:hidden" strokeWidth={2.5} />
-        <Check size={9} className="text-slate-600 dark:text-slate-300 hidden sm:block" strokeWidth={2.5} />
+      <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-slate-100 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 flex items-center justify-center z-10">
+        <Check size={8} className="text-slate-600 dark:text-slate-300" strokeWidth={2.5} />
       </div>
     );
   }
   if (status === 'error') {
     return (
-      <div className="w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full bg-rose-50 dark:bg-rose-950/80 border border-rose-300 dark:border-rose-800 flex items-center justify-center z-10">
+      <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-rose-50 dark:bg-rose-950/80 border border-rose-300 dark:border-rose-800 flex items-center justify-center z-10">
         <AlertTriangle size={8} className="text-rose-500" />
       </div>
     );
   }
   if (type === 'cannot_perform') {
     return (
-      <div className="w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full bg-amber-50 dark:bg-amber-950/80 border border-amber-300 dark:border-amber-800 flex items-center justify-center z-10">
+      <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-amber-50 dark:bg-amber-950/80 border border-amber-300 dark:border-amber-800 flex items-center justify-center z-10">
         <ShieldAlert size={8} className="text-amber-500" />
       </div>
     );
   }
   // Pending
   return (
-    <div className="w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-center z-10">
-      <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-slate-400 dark:bg-slate-500" />
+    <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center justify-center z-10">
+      <div className="w-1 h-1 rounded-full bg-slate-400 dark:bg-slate-500" />
     </div>
   );
 }
@@ -342,30 +330,28 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
 
       {/* ── Pipeline Steps / Execution Graph ───────────────────── */}
       {pipelineSteps.length > 0 && !clarNode && (
-        <div className={`accordion-grid ${!isMinimized ? 'open mb-3 sm:mb-4' : 'mb-0'}`}>
+        <div className={`accordion-grid ${!isMinimized ? 'open mb-2.5 sm:mb-3.5' : 'mb-0'}`}>
           <div className="accordion-grid-inner">
-            <div className="relative space-y-2 sm:space-y-3 pl-5 sm:pl-8 max-w-full overflow-hidden">
-              {/* Vertical tree connector line (Darker & Crisper) */}
-              <div className="absolute left-[8px] sm:left-[11px] top-2 sm:top-3 bottom-2 sm:bottom-3 w-[1.5px] sm:w-[2px] bg-gradient-to-b from-[#0055e6] via-slate-600 dark:via-slate-400 to-slate-400 dark:to-slate-600 shadow-[0_0_1px_rgba(0,0,0,0.15)]" />
+            <div className="relative space-y-1.5 sm:space-y-2.5 pl-4 sm:pl-7 max-w-full overflow-hidden">
+              {/* Vertical tree connector line */}
+              <div className="absolute left-[7px] sm:left-[10px] top-2 bottom-2 w-[1.5px] sm:w-[2px] bg-gradient-to-b from-[#0055e6] via-slate-500 dark:via-slate-500 to-slate-300 dark:to-slate-700 shadow-2xs" />
 
               {pipelineSteps.map((step, idx) => {
-                // Node is automatically expanded ONLY while actively running during execution.
-                // Once finished, all nodes default to collapsed unless explicitly toggled by user.
                 const isExpanded = expandedNodes[idx] !== undefined
                   ? expandedNodes[idx]
                   : (isExecuting && step.status === 'running');
-                const revealDelay = { animationDelay: `${idx * 110}ms` };
+                const revealDelay = { animationDelay: `${idx * 100}ms` };
 
                 // ── 1. CANNOT PERFORM / REFUSAL NODE ──────────────────
                 if (step.type === 'cannot_perform') {
                   return (
                     <div key={idx} style={revealDelay} className="relative animate-step-reveal">
-                      <div className="absolute -left-[20px] sm:-left-[29px] top-0.5 sm:top-1">
+                      <div className="absolute -left-[17px] sm:-left-[25px] top-0.5 sm:top-1">
                         <NodeStatusIcon status="error" type="cannot_perform" />
                       </div>
-                      <div className="p-2.5 sm:p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-[11px] sm:text-xs text-amber-900 dark:text-amber-300 animate-smooth-expand">
-                        <div className="flex items-center space-x-1.5 font-semibold mb-1">
-                          <ShieldAlert size={13} className="text-amber-600 dark:text-amber-400" />
+                      <div className="p-2 sm:p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-[11px] sm:text-xs text-amber-900 dark:text-amber-300 animate-smooth-expand">
+                        <div className="flex items-center space-x-1.5 font-semibold mb-0.5">
+                          <ShieldAlert size={12} className="text-amber-600 dark:text-amber-400" />
                           <span>{step.name || 'Capability Boundary Refusal'}</span>
                         </div>
                         <p className="leading-relaxed opacity-95">{step.content}</p>
@@ -378,7 +364,7 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
                 if (step.type === 'thinking') {
                   return (
                     <div key={idx} style={revealDelay} className="relative animate-step-reveal">
-                      <div className="absolute -left-[20px] sm:-left-[29px] top-0.5 sm:top-1">
+                      <div className="absolute -left-[17px] sm:-left-[25px] top-0.5 sm:top-1">
                         <NodeStatusIcon status={step.status || 'completed'} type="thinking" />
                       </div>
 
@@ -387,31 +373,30 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
                           onClick={() => toggleNodeExpand(idx)}
                           className="flex items-center space-x-1.5 sm:space-x-2 py-0.5 group cursor-pointer select-none"
                         >
-                          <Brain size={12} className="text-violet-500 shrink-0 sm:hidden" />
-                          <Brain size={13} className="text-violet-500 shrink-0 hidden sm:block" />
-                          <span className="text-[11.5px] sm:text-xs font-semibold text-violet-700 dark:text-violet-400">
+                          <Brain size={12} className="text-violet-500 shrink-0" />
+                          <span className="text-[11px] sm:text-xs font-semibold text-violet-700 dark:text-violet-400">
                             {step.name === 'Dynamic Graph Architecture' ? 'Execution Plan' : (step.name || 'Execution Plan')}
                           </span>
                           {step.totalPlannedNodes > 0 && (
-                            <span className="text-[9px] sm:text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-violet-100/80 dark:bg-violet-950/80 text-violet-700 dark:text-violet-300 font-medium">
+                            <span className="text-[8.5px] sm:text-[9.5px] font-mono px-1.5 py-0.2 rounded-full bg-violet-100/80 dark:bg-violet-950/80 text-violet-700 dark:text-violet-300 font-medium">
                               {step.totalPlannedNodes} Steps
                             </span>
                           )}
                           <span className="transition-transform duration-300 ease-out inline-flex">
-                            {isExpanded ? <ChevronDown size={11} className="text-slate-400" /> : <ChevronRight size={11} className="text-slate-400" />}
+                            {isExpanded ? <ChevronDown size={10} className="text-slate-400" /> : <ChevronRight size={10} className="text-slate-400" />}
                           </span>
                         </button>
 
                         <div className={`accordion-grid ${isExpanded ? 'open mt-1 sm:mt-1.5' : 'mt-0'}`}>
                           <div className="accordion-grid-inner">
-                            <div className="space-y-1.5 sm:space-y-2 text-[11px] sm:text-xs leading-relaxed text-slate-700 dark:text-slate-300 bg-violet-50/50 dark:bg-violet-950/20 rounded-xl p-2.5 sm:p-3 border border-violet-200/60 dark:border-violet-900/30 max-h-48 overflow-y-auto custom-scrollbar">
+                            <div className="space-y-1.5 text-[11px] sm:text-[11.5px] leading-relaxed text-slate-700 dark:text-slate-300 bg-violet-50/50 dark:bg-violet-950/20 rounded-xl p-2 sm:p-2.5 border border-violet-200/60 dark:border-violet-900/30 max-h-48 overflow-y-auto custom-scrollbar">
                               {step.content && (
                                 <p className="text-slate-700 dark:text-slate-300">{step.content}</p>
                               )}
                               
                               {step.executionPlanSummary && (
-                                <div className="pt-1.5 sm:pt-2 border-t border-violet-200/50 dark:border-violet-900/30 text-[10.5px] sm:text-[11px] font-mono">
-                                  <span className="text-violet-600 dark:text-violet-400 font-semibold uppercase text-[9px] sm:text-[9.5px] tracking-wider block mb-0.5">
+                                <div className="pt-1 border-t border-violet-200/50 dark:border-violet-900/30 text-[10px] sm:text-[10.5px] font-mono">
+                                  <span className="text-violet-600 dark:text-violet-400 font-semibold uppercase text-[8.5px] sm:text-[9px] tracking-wider block mb-0.5">
                                     Plan Strategy:
                                   </span>
                                   <span className="text-slate-800 dark:text-slate-200">{step.executionPlanSummary}</span>
@@ -419,8 +404,8 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
                               )}
 
                               {step.doneStateCriteria && (
-                                <div className="text-[10.5px] sm:text-[11px] flex items-start space-x-1.5 pt-1 text-slate-600 dark:text-slate-400">
-                                  <CheckCircle2 size={11} className="text-emerald-500 shrink-0 mt-0.5" />
+                                <div className="text-[10px] sm:text-[10.5px] flex items-start space-x-1.5 pt-0.5 text-slate-600 dark:text-slate-400">
+                                  <CheckCircle2 size={10} className="text-emerald-500 shrink-0 mt-0.5" />
                                   <span><strong className="text-slate-700 dark:text-slate-300">Goal:</strong> {step.doneStateCriteria}</span>
                                 </div>
                               )}
@@ -436,7 +421,7 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
                 if (step.type === 'vision') {
                   return (
                     <div key={idx} style={revealDelay} className="relative animate-step-reveal">
-                      <div className="absolute -left-[20px] sm:-left-[29px] top-0.5 sm:top-1">
+                      <div className="absolute -left-[17px] sm:-left-[25px] top-0.5 sm:top-1">
                         <NodeStatusIcon status={step.status} type="vision" />
                       </div>
 
@@ -444,37 +429,37 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
                         <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                           <button
                             onClick={() => toggleNodeExpand(idx)}
-                            className="flex items-center space-x-2 text-left group cursor-pointer select-none"
+                            className="flex items-center space-x-1.5 text-left group cursor-pointer select-none"
                           >
-                            <Eye size={13} className="text-cyan-500 shrink-0" />
-                            <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                            <Eye size={12} className="text-cyan-500 shrink-0" />
+                            <span className="text-[11.5px] sm:text-xs font-semibold text-slate-800 dark:text-slate-200">
                               {step.name || 'Visual Inspection & OCR'}
                             </span>
                             <span className="transition-transform duration-300 ease-out inline-flex shrink-0">
-                              {isExpanded ? <ChevronDown size={11} className="text-slate-400" /> : <ChevronRight size={11} className="text-slate-400" />}
+                              {isExpanded ? <ChevronDown size={10} className="text-slate-400" /> : <ChevronRight size={10} className="text-slate-400" />}
                             </span>
                           </button>
 
                           {step.status === 'running' && (
-                            <span className="text-[10.5px] text-cyan-500 font-medium animate-pulse shrink-0">Scanning image & extracting OCR...</span>
+                            <span className="text-[10px] text-cyan-500 font-medium animate-pulse shrink-0">Scanning image...</span>
                           )}
                           {step.status === 'completed' && (
-                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/60 dark:border-emerald-900/40 shrink-0">
-                              Inspected & Verified
+                            <span className="text-[9.5px] text-emerald-600 dark:text-emerald-400 font-medium px-1.5 py-0.2 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/60 dark:border-emerald-900/40 shrink-0">
+                              Verified
                             </span>
                           )}
                         </div>
 
-                        <div className={`accordion-grid ${isExpanded ? 'open mt-1.5' : 'mt-0'}`}>
-                          <div className="accordion-grid-inner space-y-2">
+                        <div className={`accordion-grid ${isExpanded ? 'open mt-1' : 'mt-0'}`}>
+                          <div className="accordion-grid-inner space-y-1.5">
                             {step.image && (
                               <div className="relative inline-block rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-2xs max-w-xs mt-1">
-                                <img src={step.image} alt="Uploaded screenshot" className="max-h-44 w-auto object-contain bg-slate-900/10 rounded-lg" />
+                                <img src={step.image} alt="Uploaded screenshot" className="max-h-40 w-auto object-contain bg-slate-900/10 rounded-lg" />
                               </div>
                             )}
 
                             {step.content && (
-                              <div className="text-[12px] leading-relaxed text-slate-700 dark:text-slate-300 bg-cyan-50/40 dark:bg-cyan-950/20 rounded-xl px-3.5 py-2.5 border border-cyan-200/60 dark:border-cyan-900/40">
+                              <div className="text-[11.5px] sm:text-[12px] leading-relaxed text-slate-700 dark:text-slate-300 bg-cyan-50/40 dark:bg-cyan-950/20 rounded-xl px-2.5 sm:px-3 py-2 border border-cyan-200/60 dark:border-cyan-900/40">
                                 <MarkdownRenderer content={step.content} />
                               </div>
                             )}
@@ -489,7 +474,7 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
                 if (step.type === 'search' || step.type === 'tool_search') {
                   return (
                     <div key={idx} style={revealDelay} className="relative animate-step-reveal">
-                      <div className="absolute -left-[20px] sm:-left-[29px] top-0.5 sm:top-1">
+                      <div className="absolute -left-[17px] sm:-left-[25px] top-0.5 sm:top-1">
                         <NodeStatusIcon status={step.status} type="search" />
                       </div>
 
@@ -497,69 +482,69 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
                         <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                           <button
                             onClick={() => toggleNodeExpand(idx)}
-                            className="flex items-center space-x-2 text-left group cursor-pointer select-none"
+                            className="flex items-center space-x-1.5 text-left group cursor-pointer select-none"
                           >
-                            <Search size={13} className="text-blue-500 shrink-0" />
-                            <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                            <Search size={12} className="text-blue-500 shrink-0" />
+                            <span className="text-[11.5px] sm:text-xs font-semibold text-slate-800 dark:text-slate-200">
                               {step.name || 'Web Research'}
                             </span>
                             {step.canParallel && (
-                              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-mono font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200/80 dark:border-indigo-800 shrink-0">
+                              <span className="px-1 py-0.2 rounded-full text-[8.5px] font-mono font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200/80 dark:border-indigo-800 shrink-0">
                                 Parallel
                               </span>
                             )}
                             <span className="transition-transform duration-300 ease-out inline-flex shrink-0">
-                              {isExpanded ? <ChevronDown size={11} className="text-slate-400" /> : <ChevronRight size={11} className="text-slate-400" />}
+                              {isExpanded ? <ChevronDown size={10} className="text-slate-400" /> : <ChevronRight size={10} className="text-slate-400" />}
                             </span>
                           </button>
 
                           {step.status === 'running' && (
-                            <span className="text-[10.5px] text-blue-500 font-medium animate-pulse shrink-0">Searching live sources...</span>
+                            <span className="text-[10px] text-blue-500 font-medium animate-pulse shrink-0">Searching live...</span>
                           )}
                           {step.status === 'completed' && step.results?.length > 0 && (
-                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/60 dark:border-emerald-900/40 shrink-0">
-                              {step.results.length} sources verified
+                            <span className="text-[9.5px] text-emerald-600 dark:text-emerald-400 font-medium px-1.5 py-0.2 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/60 dark:border-emerald-900/40 shrink-0">
+                              {step.results.length} sources
                             </span>
                           )}
                         </div>
 
-                        <div className={`accordion-grid ${isExpanded ? 'open mt-1.5' : 'mt-0'}`}>
-                          <div className="accordion-grid-inner space-y-2">
+                        <div className={`accordion-grid ${isExpanded ? 'open mt-1' : 'mt-0'}`}>
+                          <div className="accordion-grid-inner space-y-1.5">
                             {step.query && (
-                              <div className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 font-mono inline-block">
+                              <div className="text-[10.5px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 font-mono inline-block">
                                 Query: <span className="font-semibold text-slate-800 dark:text-slate-200">"{step.query}"</span>
                               </div>
                             )}
 
                             {/* Search Results List */}
                             {step.results?.length > 0 && (
-                              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0c0f17] overflow-hidden shadow-2xs divide-y divide-slate-100 dark:divide-slate-800/60 max-h-60 overflow-y-auto custom-scrollbar">
+                              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0c0f17] overflow-hidden shadow-2xs divide-y divide-slate-100 dark:divide-slate-800/60 max-h-56 overflow-y-auto custom-scrollbar">
                                 {step.results.map((result, rIdx) => (
                                   <a
                                     key={rIdx}
                                     href={result.url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="flex items-start px-3.5 py-2 text-[11px] hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors group"
+                                    className="flex items-start px-2.5 sm:px-3 py-1.5 text-[10.5px] sm:text-[11px] hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors group"
                                   >
                                     <FaviconIcon src={result.favicon} domain={result.domain} />
-                                    <div className="flex-1 min-w-0 pr-2">
+                                    <div className="flex-1 min-w-0 pr-1.5">
                                       <div className="flex items-center space-x-1 mb-0.5">
-                                        <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500">{result.domain}</span>
+                                        <span className="text-[9.5px] font-mono text-slate-400 dark:text-slate-500 truncate">{result.domain}</span>
                                         {result.source === 'tavily' && (
-                                          <span className="text-[9px] px-1 rounded bg-blue-50 dark:bg-blue-950/80 text-[#0066FF] font-semibold">Verified</span>
+                                          <span className="text-[8.5px] px-1 rounded bg-blue-50 dark:bg-blue-950/80 text-[#0066FF] font-semibold">Verified</span>
                                         )}
                                       </div>
                                       <p className="font-medium text-slate-800 dark:text-slate-200 truncate group-hover:text-[#0066FF] transition-colors">
                                         {result.title}
                                       </p>
                                       {result.snippet && (
-                                        <p className="text-[10.5px] text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2 leading-relaxed">
+                                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2 leading-snug">
                                           {result.snippet}
                                         </p>
                                       )}
                                     </div>
-                                    <ExternalLink size={11} className="shrink-0 text-slate-300 dark:text-slate-600 group-hover:text-blue-500 mt-0.5" />
+                                    <ExternalLink size={10} className="shrink-0 text-slate-300 dark:text-slate-600 group-hover:text-blue-500 mt-0.5" />
                                   </a>
                                 ))}
                               </div>
@@ -582,22 +567,22 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
 
                   return (
                     <div key={idx} style={revealDelay} className="relative animate-step-reveal">
-                      <div className="absolute -left-[20px] sm:-left-[29px] top-0.5 sm:top-1">
+                      <div className="absolute -left-[17px] sm:-left-[25px] top-0.5 sm:top-1">
                         <NodeStatusIcon status={step.status} type="code" />
                       </div>
 
                       <div>
-                        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 mb-1.5">
-                          <div className="flex items-center space-x-2">
-                            <Code2 size={13} className="text-[#0066FF] shrink-0" />
-                            <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                        <div className="flex flex-wrap items-center justify-between gap-x-1.5 gap-y-1 mb-1">
+                          <div className="flex items-center space-x-1.5 min-w-0">
+                            <Code2 size={12} className="text-[#0066FF] shrink-0" />
+                            <span className="text-[11.5px] sm:text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
                               {step.name || 'Source Code'}
                             </span>
-                            <span className="px-1.5 py-0.2 rounded-md bg-blue-50 dark:bg-blue-950/60 text-[#0066FF] dark:text-blue-400 border border-blue-200/80 dark:border-blue-800/60 font-mono text-[9.5px] font-bold uppercase shrink-0">
+                            <span className="px-1 py-0.2 rounded bg-blue-50 dark:bg-blue-950/60 text-[#0066FF] dark:text-blue-400 border border-blue-200/80 dark:border-blue-800/60 font-mono text-[9px] font-bold uppercase shrink-0">
                               {langTag}
                             </span>
                             {lineCount > 0 && (
-                              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono shrink-0">{lineCount} lines</span>
+                              <span className="text-[9.5px] text-slate-400 dark:text-slate-500 font-mono shrink-0 hidden xs:inline">{lineCount} lines</span>
                             )}
                           </div>
 
@@ -606,7 +591,7 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
                             {cleanedCode && (
                               <button
                                 onClick={() => setWrapCodeNodes(prev => ({ ...prev, [idx]: !prev[idx] }))}
-                                className={`px-2 py-1 rounded-lg text-[11px] font-medium transition-all shadow-2xs cursor-pointer border ${
+                                className={`px-1.5 py-0.5 rounded-md text-[10px] sm:text-[10.5px] font-medium transition-all shadow-2xs cursor-pointer border ${
                                   isWrapped
                                     ? 'bg-blue-100 dark:bg-blue-950/80 text-[#0066FF] dark:text-blue-400 border-blue-200 dark:border-blue-800'
                                     : 'bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800/80 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-200/80 dark:border-slate-700/60'
@@ -619,28 +604,28 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
                             {onOpenIdePanel && cleanedCode && (
                               <button
                                 onClick={() => onOpenIdePanel(cleanedCode, step.title || step.name, step.language)}
-                                className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-blue-50/80 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/60 text-[#0066FF] dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/40 text-[11px] font-medium transition-all shadow-2xs cursor-pointer active:scale-95"
+                                className="flex items-center space-x-1 px-2 py-0.5 rounded-md bg-blue-50/80 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/60 text-[#0066FF] dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/40 text-[10px] sm:text-[10.5px] font-medium transition-all shadow-2xs cursor-pointer active:scale-95"
                                 title="Open Code Canvas"
                               >
-                                <Code2 size={11} />
+                                <Code2 size={10} />
                                 <span>Canvas</span>
                               </button>
                             )}
                             <button
                               onClick={() => handleCopyCode(cleanedCode, idx)}
-                              className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800/80 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/60 text-[11px] font-medium transition-all shadow-2xs cursor-pointer active:scale-95"
+                              className="flex items-center space-x-1 px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800/80 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/60 text-[10px] sm:text-[10.5px] font-medium transition-all shadow-2xs cursor-pointer active:scale-95"
                               title="Copy Code"
                             >
-                              {copiedIndex === idx ? <Check size={11} className="text-emerald-500" /> : <Copy size={11} />}
+                              {copiedIndex === idx ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} />}
                               <span>{copiedIndex === idx ? 'Copied' : 'Copy'}</span>
                             </button>
                             {isPreviewable && onOpenPreview && cleanedCode && (
                               <button
                                 onClick={() => onOpenPreview(cleanedCode, step.title || step.name)}
-                                className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-[#0066FF] hover:bg-blue-700 text-white text-[11px] font-medium transition-all shadow-xs cursor-pointer active:scale-95"
+                                className="flex items-center space-x-1 px-2 py-0.5 rounded-md bg-[#0066FF] hover:bg-blue-700 text-white text-[10px] sm:text-[10.5px] font-medium transition-all shadow-xs cursor-pointer active:scale-95"
                                 title="Live Preview"
                               >
-                                <Play size={10} fill="currentColor" />
+                                <Play size={9} fill="currentColor" />
                                 <span>Preview</span>
                               </button>
                             )}
@@ -650,16 +635,16 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
                         {/* Code Container */}
                         <div className="rounded-xl border border-slate-200/90 dark:border-slate-800 overflow-hidden bg-[#f8fafc] dark:bg-[#090c12] shadow-2xs">
                           {step.status === 'error' ? (
-                            <div className="flex items-center space-x-2 px-4 py-3 text-rose-500 text-xs">
-                              <AlertTriangle size={13} />
-                              <span>Code generation interrupted or rate limited. Retrying with fallback model...</span>
+                            <div className="flex items-center space-x-2 px-3 py-2 text-rose-500 text-xs">
+                              <AlertTriangle size={12} />
+                              <span>Code generation interrupted. Retrying with fallback...</span>
                             </div>
                           ) : (step.code && step.code.trim()) ? (
                             <StreamingCodeBox code={cleanCodeContent(step.code) || step.code} language={step.language} wrapCode={isWrapped} />
                           ) : (
-                            <div className="flex items-center space-x-2 px-4 py-3">
-                              <RefreshCw size={12} className="text-blue-400 animate-spin" />
-                              <span className="text-[11px] text-slate-500 dark:text-slate-400">Generating code token-by-token...</span>
+                            <div className="flex items-center space-x-2 px-3 py-2">
+                              <RefreshCw size={11} className="text-blue-400 animate-spin" />
+                              <span className="text-[10.5px] text-slate-500 dark:text-slate-400">Generating code...</span>
                             </div>
                           )}
                         </div>
@@ -673,16 +658,16 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
                 if (step.type === 'synthesis') {
                   return (
                     <div key={idx} style={revealDelay} className="relative animate-step-reveal">
-                      <div className="absolute -left-[20px] sm:-left-[29px] top-0.5 sm:top-1">
+                      <div className="absolute -left-[17px] sm:-left-[25px] top-0.5 sm:top-1">
                         <NodeStatusIcon status={step.status} type="synthesis" />
                       </div>
                       <div className="flex items-center space-x-1.5 py-0.5 max-w-full">
-                        <Sparkles size={12} className="text-[#0066FF] shrink-0" />
-                        <span className="text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 truncate">
+                        <Sparkles size={11} className="text-[#0066FF] shrink-0" />
+                        <span className="text-[11px] sm:text-[11.5px] font-semibold text-slate-800 dark:text-slate-200 truncate">
                           {step.name || 'Synthesis & Final Deliverable'}
                         </span>
                         {step.status === 'running' && (
-                          <span className="text-[9.5px] text-[#0066FF] font-medium px-1.5 py-0.2 rounded bg-blue-50 dark:bg-blue-950 font-mono animate-pulse">
+                          <span className="text-[9px] text-[#0066FF] font-medium px-1.5 py-0.2 rounded bg-blue-50 dark:bg-blue-950 font-mono animate-pulse">
                             Generating...
                           </span>
                         )}
@@ -694,33 +679,28 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
                 // ── 6. ANALYSIS / GENERAL NODE ────────────────────────
                 return (
                   <div key={idx} style={revealDelay} className="relative animate-step-reveal">
-                    <div className="absolute -left-[20px] sm:-left-[29px] top-0.5 sm:top-1">
+                    <div className="absolute -left-[17px] sm:-left-[25px] top-0.5 sm:top-1">
                       <NodeStatusIcon status={step.status} type={step.type} />
                     </div>
 
                     <div>
                       <button
                         onClick={() => toggleNodeExpand(idx)}
-                        className="flex items-center space-x-2 mb-1 group cursor-pointer select-none"
+                        className="flex items-center space-x-1.5 mb-1 group cursor-pointer select-none"
                       >
-                        <Sparkles size={12} className="text-blue-500" />
-                        <span className="text-[11.5px] font-semibold text-slate-800 dark:text-slate-200">
+                        <Sparkles size={11} className="text-blue-500" />
+                        <span className="text-[11px] sm:text-[11.5px] font-semibold text-slate-800 dark:text-slate-200">
                           {step.name || 'Stage Analysis & Execution'}
                         </span>
-                        {step.inputFrom?.length > 0 && (
-                          <span className="text-[9.5px] text-slate-400 dark:text-slate-500 font-mono">
-                            (input from: {step.inputFrom.join(', ')})
-                          </span>
-                        )}
                         <span className="transition-transform duration-300 ease-out inline-flex">
-                          {isExpanded ? <ChevronDown size={11} className="text-slate-400" /> : <ChevronRight size={11} className="text-slate-400" />}
+                          {isExpanded ? <ChevronDown size={10} className="text-slate-400" /> : <ChevronRight size={10} className="text-slate-400" />}
                         </span>
                       </button>
 
-                      <div className={`accordion-grid ${isExpanded ? 'open mt-1.5' : 'mt-0'}`}>
+                      <div className={`accordion-grid ${isExpanded ? 'open mt-1' : 'mt-0'}`}>
                         <div className="accordion-grid-inner">
                           {step.content && (
-                            <div className="text-[12px] leading-relaxed text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/60 rounded-xl px-3.5 py-2.5 border border-slate-200/80 dark:border-slate-800">
+                            <div className="text-[11.5px] sm:text-[12px] leading-relaxed text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/60 rounded-xl px-3 py-2 border border-slate-200/80 dark:border-slate-800">
                               <MarkdownRenderer content={step.content} />
                             </div>
                           )}
@@ -737,8 +717,8 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
 
       {/* ── Final Synthesis & Combined Response ────────────────── */}
       {responseStep && responseStep.content && (
-        <div className="pt-2 animate-step-reveal">
-          <div className="text-sm leading-relaxed text-slate-800 dark:text-slate-200">
+        <div className="pt-1.5 animate-step-reveal">
+          <div className="text-[13px] sm:text-[13.5px] leading-relaxed text-slate-800 dark:text-slate-200">
             <MarkdownRenderer content={responseStep.content} />
           </div>
         </div>
@@ -751,41 +731,41 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
         return (
           <div 
             onClick={() => onOpenIdePanel(cleanedCode, codeNode.title || 'Code Artifact', codeNode.language)}
-            className="mt-2.5 px-3 py-2 rounded-xl bg-white dark:bg-[#0e1322] border border-slate-200/90 dark:border-slate-800 hover:border-blue-500/60 dark:hover:border-blue-500/60 shadow-2xs hover:shadow-xs transition-all duration-200 flex items-center justify-between gap-3 cursor-pointer group animate-step-reveal select-none"
+            className="mt-2 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-white dark:bg-[#0e1322] border border-slate-200/90 dark:border-slate-800 hover:border-blue-500/60 dark:hover:border-blue-500/60 shadow-2xs hover:shadow-xs transition-all duration-200 flex items-center justify-between gap-2.5 cursor-pointer group animate-step-reveal select-none"
           >
-            <div className="flex items-center space-x-2.5 min-w-0 truncate">
-              <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/70 text-[#0066FF] dark:text-blue-400 flex items-center justify-center shrink-0 border border-blue-100 dark:border-blue-900/40">
-                <Code2 size={14} />
+            <div className="flex items-center space-x-2 min-w-0 truncate">
+              <div className="w-6 h-6 rounded-lg bg-blue-50 dark:bg-blue-950/70 text-[#0066FF] dark:text-blue-400 flex items-center justify-center shrink-0 border border-blue-100 dark:border-blue-900/40">
+                <Code2 size={13} />
               </div>
-              <div className="flex items-center space-x-2 min-w-0 truncate">
-                <span className="text-xs font-semibold text-slate-900 dark:text-slate-100 group-hover:text-[#0066FF] dark:group-hover:text-blue-400 transition-colors truncate">
+              <div className="flex items-center space-x-1.5 min-w-0 truncate">
+                <span className="text-[11.5px] sm:text-xs font-semibold text-slate-900 dark:text-slate-100 group-hover:text-[#0066FF] dark:group-hover:text-blue-400 transition-colors truncate">
                   {codeNode.title || 'Code Artifact'}
                 </span>
-                <span className="text-[10.5px] text-slate-400 dark:text-slate-500 font-mono uppercase shrink-0">
+                <span className="text-[9.5px] sm:text-[10px] text-slate-400 dark:text-slate-500 font-mono uppercase shrink-0">
                   • {codeNode.language || 'code'}
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center space-x-1.5 shrink-0">
+            <div className="flex items-center space-x-1 shrink-0">
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleCopyCode(codeNode.code, 'banner-copy');
                 }}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                 title="Copy code"
               >
-                {copiedIndex === 'banner-copy' ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
+                {copiedIndex === 'banner-copy' ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
               </button>
 
               <button
                 type="button"
                 onClick={() => onOpenIdePanel(cleanedCode, codeNode.title || 'Code Artifact', codeNode.language)}
-                className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-[#0066FF] hover:bg-blue-700 active:scale-95 text-white text-[11px] font-medium transition-all shadow-2xs cursor-pointer shrink-0"
+                className="flex items-center space-x-1 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md bg-[#0066FF] hover:bg-blue-700 active:scale-95 text-white text-[10.5px] sm:text-[11px] font-medium transition-all shadow-2xs cursor-pointer shrink-0"
               >
-                <Code2 size={11} />
+                <Code2 size={10} />
                 <span>Open Canvas</span>
               </button>
             </div>

@@ -21,29 +21,29 @@ export default function ApiKeyModal({ isOpen, onClose, onSave }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl w-[94%] sm:w-full max-w-md overflow-hidden">
         {/* Modal Header */}
-        <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between p-3.5 sm:p-4 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-[#0066FF] dark:text-blue-400 flex items-center justify-center">
-              <Key size={16} />
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-[#0066FF] dark:text-blue-400 flex items-center justify-center shrink-0">
+              <Key size={15} />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Groq API Key Pool</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Multi-Key Automatic Failover & Rotation</p>
+              <h2 className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white">Groq API Key Pool</h2>
+              <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">Multi-Key Automatic Failover & Rotation</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
           >
-            <X size={16} />
+            <X size={15} />
           </button>
         </div>
 
         {/* Modal Body */}
-        <form onSubmit={handleSave} className="p-5 space-y-4">
+        <form onSubmit={handleSave} className="p-3.5 sm:p-5 space-y-3.5 sm:space-y-4">
           <div className="p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/50 flex items-start space-x-2.5 text-xs text-blue-900 dark:text-blue-300">
             <Layers size={16} className="shrink-0 mt-0.5 text-[#0066FF] dark:text-blue-400" />
             <div>

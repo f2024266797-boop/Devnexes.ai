@@ -9,14 +9,8 @@ import { getGroqApiKey, streamGroqChat, generateDynamicAgentPipeline, AVAILABLE_
 import MarkdownRenderer from './components/MarkdownRenderer';
 import {
   AlertCircle,
-  Code2,
   BookOpen,
   PanelLeftOpen,
-  Cpu,
-  Layers,
-  Globe,
-  FileText,
-  Zap,
   ArrowDown,
   X
 } from 'lucide-react';
@@ -462,16 +456,16 @@ export default function App() {
         <main className={`flex-1 flex flex-col h-full overflow-hidden min-w-0 w-full max-w-full relative border-r ${isDarkMode ? 'border-slate-800/60' : 'border-slate-200'}`}>
 
           {/* Header */}
-          <header className={`h-12 px-3 sm:px-4 flex items-center justify-between shrink-0 border-b ${isDarkMode ? 'border-slate-800/60 bg-[#080b14]/90' : 'border-slate-200 bg-white/90'} backdrop-blur-md z-10`}>
+          <header className={`h-11 sm:h-12 px-2.5 sm:px-4 flex items-center justify-between shrink-0 border-b ${isDarkMode ? 'border-slate-800/60 bg-[#080b14]/90' : 'border-slate-200 bg-white/90'} backdrop-blur-md z-10`}>
 
             {/* Left: Mobile sidebar toggle + Brand logo & title */}
             <div className="flex items-center space-x-2 truncate pr-2">
               <button
                 onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer md:hidden"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer md:hidden"
                 title="Toggle Sidebar"
               >
-                <PanelLeftOpen size={17} />
+                <PanelLeftOpen size={16} />
               </button>
 
               {isSidebarCollapsed ? (
@@ -480,7 +474,7 @@ export default function App() {
                   <img 
                     src="/devnexes-logo.png" 
                     alt="Devnexes AI" 
-                    className="w-6 h-6 object-contain shrink-0 animate-logo-float"
+                    className="w-5.5 h-5.5 sm:w-6 sm:h-6 object-contain shrink-0 animate-logo-float"
                   />
                   <div className="flex items-center space-x-1.5 truncate">
                     <span className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white tracking-tight shrink-0">
@@ -503,13 +497,13 @@ export default function App() {
             </div>
 
             {/* Right actions */}
-            <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+            <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0">
               {!hasApiKey && (
                 <button
                   onClick={() => setIsApiKeyModalOpen(true)}
-                  className="flex items-center space-x-1 text-amber-600 dark:text-amber-400 font-medium px-2 sm:px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 text-[11px] sm:text-xs hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors cursor-pointer"
+                  className="flex items-center space-x-1 text-amber-600 dark:text-amber-400 font-medium px-2 py-0.5 sm:py-1 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 text-[10.5px] sm:text-xs hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors cursor-pointer"
                 >
-                  <AlertCircle size={12} />
+                  <AlertCircle size={11} />
                   <span className="hidden sm:inline">Set API Key</span>
                 </button>
               )}
@@ -517,7 +511,7 @@ export default function App() {
               {/* Book Icon Button for Code Canvas / Workspace */}
               <button
                 onClick={() => setIdePanel(prev => ({ ...prev, isOpen: !prev.isOpen }))}
-                className={`p-1.5 sm:p-2 rounded-xl transition-all duration-200 cursor-pointer ${
+                className={`p-1.5 rounded-lg transition-all duration-200 cursor-pointer ${
                   idePanel.isOpen
                     ? 'bg-blue-100 dark:bg-blue-950/80 text-[#0066FF] dark:text-blue-400 ring-1 ring-blue-500/30 shadow-xs'
                     : isDarkMode
@@ -526,7 +520,7 @@ export default function App() {
                 }`}
                 title={idePanel.isOpen ? "Close Code Canvas" : "Open Code Canvas"}
               >
-                <BookOpen size={16} />
+                <BookOpen size={15} />
               </button>
             </div>
           </header>
@@ -538,23 +532,23 @@ export default function App() {
             className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar flex flex-col w-full max-w-full"
           >
             {activeConv && activeConv.messages.length > 0 ? (
-              <div className="messages-wrapper max-w-3xl w-full mx-auto px-2.5 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6 overflow-x-hidden">
+              <div className="messages-wrapper max-w-3xl w-full mx-auto px-3.5 sm:px-6 md:px-8 py-3 sm:py-6 space-y-4 sm:space-y-6 overflow-x-hidden">
                 {activeConv.messages.map((msg) => (
                   <div key={msg.id} className="animate-bubble-in w-full max-w-full overflow-hidden">
 
                     {msg.role === 'user' ? (
                       /* User message — right aligned */
                       <div className="flex justify-end w-full max-w-full">
-                        <div className={`max-w-[90%] sm:max-w-xl px-3.5 sm:px-4 py-2.5 rounded-2xl rounded-tr-sm text-xs sm:text-sm leading-relaxed shadow-xs border break-words ${isDarkMode ? 'bg-[#1a2035] border-blue-900/40 text-slate-100' : 'bg-blue-50 border-blue-100 text-slate-900'}`}>
+                        <div className={`max-w-[88%] sm:max-w-xl px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-2xl rounded-tr-xs text-[12.5px] sm:text-[13.5px] leading-relaxed shadow-2xs border break-words ${isDarkMode ? 'bg-[#181f33] border-blue-900/40 text-slate-100' : 'bg-blue-50/90 border-blue-100 text-slate-900'}`}>
                           {msg.image && (
                             <div
                               onClick={() => setSelectedImageModal({ isOpen: true, url: msg.image })}
                               className="mb-2 max-w-xs rounded-xl overflow-hidden border border-slate-300/80 dark:border-slate-700/80 bg-slate-900/10 dark:bg-black/40 cursor-pointer group relative"
                               title="Click to zoom image"
                             >
-                              <img src={msg.image} alt="User attachment" className="max-h-56 w-auto object-contain rounded-lg group-hover:scale-[1.02] transition-transform duration-200" />
+                              <img src={msg.image} alt="User attachment" className="max-h-52 w-auto object-contain rounded-lg group-hover:scale-[1.02] transition-transform duration-200" />
                               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center transition-colors">
-                                <span className="opacity-0 group-hover:opacity-100 px-2 py-1 rounded-md bg-black/70 text-white text-[10.5px] font-medium transition-opacity">Zoom</span>
+                                <span className="opacity-0 group-hover:opacity-100 px-2 py-0.5 rounded-md bg-black/70 text-white text-[10px] font-medium transition-opacity">Zoom</span>
                               </div>
                             </div>
                           )}
@@ -562,18 +556,10 @@ export default function App() {
                         </div>
                       </div>
                     ) : (
-                      /* AI message — left aligned with icon */
-                      <div className="flex items-start space-x-2 sm:space-x-3 w-full max-w-full overflow-hidden">
-                        <div className="shrink-0 mt-0.5">
-                          <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full overflow-hidden flex items-center justify-center">
-                            <img
-                              src="/devnexes-logo.png"
-                              alt="Devnexes AI"
-                              className="w-full h-full object-contain animate-logo-float"
-                            />
-                          </div>
-                        </div>
-                        <div className="flex-1 min-w-0 max-w-full overflow-hidden pt-0.5">
+                      /* AI message — clean direct thought process & content */
+                      <div className="w-full max-w-full overflow-hidden">
+                        {/* Message / Trace Content */}
+                        <div className="w-full max-w-full overflow-hidden">
                           {msg.isTrace ? (
                             <AgentTraceTree
                               traceData={msg.traceData}
@@ -583,7 +569,7 @@ export default function App() {
                               onSendMessage={handleSendMessage}
                             />
                           ) : (
-                            <div className="text-xs sm:text-sm leading-relaxed">
+                            <div className="text-[13px] sm:text-[13.5px] leading-relaxed">
                               <MarkdownRenderer content={msg.content} />
                             </div>
                           )}
@@ -596,15 +582,13 @@ export default function App() {
 
                 {/* Loading indicator */}
                 {isLoading && activeConv.messages[activeConv.messages.length - 1]?.role === 'user' && (
-                  <div className="flex items-center space-x-2.5 sm:space-x-3">
-                    <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center">
-                      <img src="/devnexes-logo.png" alt="Devnexes AI" className="w-full h-full object-contain animate-logo-float" />
-                    </div>
-                    <div className="flex space-x-1.5 px-3 py-2">
+                  <div className="flex items-center space-x-2 pl-0.5 sm:pl-1 py-1">
+                    <img src="/devnexes-logo.png" alt="Devnexes AI" className="w-5 h-5 object-contain animate-logo-float" />
+                    <div className="flex space-x-1 px-2 py-1">
                       {[0, 1, 2].map(i => (
                         <div
                           key={i}
-                          className="w-2 h-2 rounded-full bg-[#0066FF]/60 animate-bounce"
+                          className="w-1.5 h-1.5 rounded-full bg-[#0066FF]/70 animate-bounce"
                           style={{ animationDelay: `${i * 150}ms` }}
                         />
                       ))}
@@ -616,27 +600,27 @@ export default function App() {
               </div>
             ) : (
               /* Welcome / empty state with centered ChatInput */
-              <div className="flex-1 flex flex-col items-center justify-center px-4 py-8 select-none">
-                <div className="w-full max-w-2xl space-y-6 sm:space-y-8 animate-fade-in">
+              <div className="flex-1 flex flex-col items-center justify-center px-3 sm:px-4 py-6 sm:py-8 select-none">
+                <div className="w-full max-w-2xl space-y-4 sm:space-y-6 animate-fade-in">
 
                   {/* Logo + greeting */}
-                  <div className="text-center space-y-3 sm:space-y-4">
+                  <div className="text-center space-y-2 sm:space-y-3">
                     <div className="inline-flex items-center justify-center relative">
-                      <div className={`p-3 sm:p-3.5 rounded-2xl relative overflow-hidden border ${isDarkMode ? 'bg-slate-800/60 border-slate-700/50' : 'bg-white border-slate-200'} shadow-lg`}>
+                      <div className={`p-2.5 sm:p-3 rounded-2xl relative overflow-hidden border ${isDarkMode ? 'bg-slate-800/60 border-slate-700/50' : 'bg-white border-slate-200'} shadow-md`}>
                         <div className="absolute inset-0 pointer-events-none animate-mirror-shine bg-gradient-to-r from-transparent via-white/20 to-transparent" />
                         <img
                           src="/devnexes-logo.png"
                           alt="Devnexes AI"
-                          className="w-10 h-10 sm:w-12 sm:h-12 object-contain animate-logo-float relative z-10"
+                          className="w-8 h-8 sm:w-11 sm:h-11 object-contain animate-logo-float relative z-10"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <h1 className={`text-2xl sm:text-3xl font-semibold tracking-tight ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}>
+                      <h1 className={`text-xl sm:text-2xl font-semibold tracking-tight ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}>
                         {currentGreeting.title}
                       </h1>
-                      <p className={`mt-1.5 text-xs sm:text-sm ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                      <p className={`mt-1 text-[11.5px] sm:text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
                         {currentGreeting.subtitle}
                       </p>
                     </div>
@@ -655,12 +639,12 @@ export default function App() {
 
                   {/* Dynamic Suggestion Chips */}
                   {currentGreeting.chips && currentGreeting.chips.length > 0 && (
-                    <div className="flex flex-wrap items-center justify-center gap-2 pt-1 px-2 animate-fade-in">
+                    <div className="flex flex-wrap items-center justify-center gap-1.5 pt-0.5 px-2 animate-fade-in">
                       {currentGreeting.chips.map((chip, cIdx) => (
                         <button
                           key={cIdx}
                           onClick={() => handleSendMessage(chip)}
-                          className={`text-xs px-3 py-1.5 rounded-xl border transition-all cursor-pointer select-none active:scale-95 ${
+                          className={`text-[11px] sm:text-xs px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg sm:rounded-xl border transition-all cursor-pointer select-none active:scale-95 ${
                             isDarkMode
                               ? 'bg-slate-800/50 hover:bg-slate-800 border-slate-700/60 text-slate-300 hover:text-white hover:border-blue-500/50'
                               : 'bg-white hover:bg-blue-50/60 border-slate-200/90 text-slate-700 hover:text-[#0066FF] hover:border-blue-300 shadow-2xs'
