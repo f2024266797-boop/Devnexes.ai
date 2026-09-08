@@ -22,7 +22,7 @@ export default function ApiKeyModal({ isOpen, onClose, onSave }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl w-[94%] sm:w-full max-w-md overflow-hidden">
+      <div className="bg-white dark:bg-[#0d1120] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-[94%] sm:w-full max-w-md overflow-hidden">
         {/* Modal Header */}
         <div className="flex items-center justify-between p-3.5 sm:p-4 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center space-x-2.5">
@@ -61,7 +61,7 @@ export default function ApiKeyModal({ isOpen, onClose, onSave }) {
               value={apiKey}
               onChange={(e) => setApiKeyInput(e.target.value)}
               placeholder="gsk_..."
-              className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 font-mono"
+              className="w-full px-3 py-2 text-xs bg-white dark:bg-[#080a14] border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 font-mono"
             />
           </div>
 
@@ -82,13 +82,13 @@ export default function ApiKeyModal({ isOpen, onClose, onSave }) {
             <button
               type="button"
               onClick={onClose}
-              className="px-3.5 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+              className="px-3.5 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-xs font-medium bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white rounded-xl shadow-sm transition-colors flex items-center space-x-1.5"
+              className="px-4 py-2 text-xs font-medium bg-[#0066FF] hover:bg-blue-600 active:scale-95 text-white rounded-xl shadow-xs transition-all cursor-pointer flex items-center space-x-1.5"
             >
               {savedSuccess ? (
                 <>

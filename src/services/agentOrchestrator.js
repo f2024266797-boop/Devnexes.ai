@@ -89,87 +89,86 @@ function safeExtractJson(text) {
   return null;
 }
 
-export async function planDynamicExecutionGraph({ prompt, image, apiKey, model, messagesHistory = [] }) {
+export async function planDynamicExecutionGraph({ prompt, image, apiKey, model, messagesHistory = [], forceWebSearch = false, forceCanvasCode = false }) {
   const allSkillIds = Object.keys(DETAILED_SKILLS).join(' | ');
   const hasImage = !!image;
+  const systemPlannerPrompt = `You are the High-IQ Master Graph Architect and Autonomous Thinking Engine for Devnexes AI.
 
-  const systemPlannerPrompt = `You are the Master Graph Architect and Autonomous Thinking Engine for Devnexes AI.
+Analyze the user's message with deep cognitive intelligence, structural clarity, and domain depth. Understand English, Roman Urdu, Hindi, and Urdu natively.
+Dynamically design an unconstrained, high-density execution graph (DAG) tailored specifically to the user's explicit and implicit intent.
 
-Analyze the user's message with extreme intelligence and high precision. Understand English, Roman Urdu, Hindi, and Urdu seamlessly.
-Dynamically design an optimal, focused execution graph (DAG) of nodes.
+UNRESTRICTED GRAPH SIZING & DENSITY:
+- There is ZERO artificial restriction or ceiling on the number of execution nodes (from 1, 2, 3, 5, 8, 10 up to 20+ nodes as appropriate).
+- Small queries = 1-2 focused nodes.
+- Full-stack apps, e-commerce platforms, complex tools, or multi-file systems = Plan a comprehensive, multi-stage DAG (e.g. Architecture -> Frontend Canvas UI -> Backend API & Models -> Auth & State -> Local Terminal Runner).
+
+${forceWebSearch ? `[USER EXPLICITLY ENABLED LIVE WEB SEARCH FILTER]:
+- You MUST include a "search" node (Stage 1) with an optimal search query, followed by a "synthesis" node (Stage 2) grounded in the search results!` : ''}
+
+${forceCanvasCode ? `[USER EXPLICITLY ENABLED LIVE CANVAS CODE FILTER]:
+- You MUST include a "code" node (Stage 1) to generate complete production code into the interactive Canvas, followed by a "synthesis" node (Stage 2)!` : ''}
 
 ${hasImage ? `[IMAGE / SCREENSHOT ATTACHED]: The user has attached an image or screenshot!
 - Queries like "ismy kya ha", "ye kya hai", "kya likha hai", "check this", "explain this" are 100% CLEAR visual inspection requests.
 - NEVER set "needsClarification": true when an image is attached!
 - If the user just wants to understand/analyze the image, create a single "vision" node.` : ''}
 
+CLARIFICATION & INTERACTIVE MCQ DIRECTIVES:
+- If the user's request is ambiguous, open-ended, or has multiple valid design/tech paths (e.g. "ecommerce website", "create website", "build app", "search something", "portfolio", or vague prompts):
+  * Set "needsClarification": true!
+  * Formulate a sharp clarifying question in "question" and provide 3-4 distinct actionable choices in "options" (e.g. ["Simple Static HTML/CSS", "React Frontend + Node/Express", "Full-Stack Python Django", "Next.js + Tailwind"]).
+- If the user has ALREADY provided specific details (e.g. "Ducky Bhai real name", "Django REST API", "React calculator") or is responding to a previous MCQ choice:
+  * Set "needsClarification": false and immediately plan the execution graph!
+
 OUTPUT ONLY VALID JSON:
 {
   "needsClarification": false,
   "clarification": {
-    "question": "Question to ask the user if and only if prompt is ambiguous",
+    "question": "Clear, direct clarifying question if and only if prompt is underspecified",
     "options": ["Option A", "Option B", "Option C"]
   },
   "cannotPerform": false,
   "cannotPerformReason": null,
-  "intentCategory": "${hasImage ? 'VISION_ANALYSIS' : 'GREETING | CONVERSATION | CODE_BUILD | RESEARCH | ANALYSIS | DOCUMENT'}",
-  "thinkingSummary": "${hasImage ? 'Inspecting image visual elements, layout, and extracted details' : 'Direct, technical strategy for solving the prompt cleanly'}",
-  "executionPlanSummary": "${hasImage ? 'Visual Inspection & Detailed Analysis' : 'e.g. Stage 1: Real-Time Web Search -> Stage 2: Verified Fact Synthesis'}",
-  "doneStateCriteria": "${hasImage ? 'Comprehensive visual inspection, details, and answers delivered' : 'e.g. Accurate verified factual summary delivered'}",
+  "intentCategory": "${forceWebSearch ? 'RESEARCH' : forceCanvasCode ? 'CODE_BUILD' : hasImage ? 'VISION_ANALYSIS' : 'GREETING | CONVERSATION | CODE_BUILD | RESEARCH | ARCHITECTURE | ANALYSIS | ROADMAP'}",
+  "thinkingSummary": "Sharp, insightful analytical summary explaining the strategic approach to the query",
+  "executionPlanSummary": "Structured multi-stage plan summary (e.g. Stage 1: Search -> Stage 2: Code Canvas Build -> Stage 3: Local Terminal Runner)",
+  "doneStateCriteria": "Clear, measurable criteria for successful task fulfillment",
   "skillId": "${allSkillIds}",
   "nodes": [
     {
       "id": "node_unique_id",
-      "name": "Clear Descriptive Node Title",
-      "type": "${hasImage ? 'vision | code | analysis | synthesis | search' : 'search | code | analysis | synthesis'}",
-      "task": "Specific, actionable instruction for this node",
+      "name": "Concise Descriptive Node Title",
+      "type": "search | code | cmd | analysis | synthesis | vision",
+      "task": "Sharp, actionable task instruction for this node",
       "inputFrom": ["id_of_previous_node_if_needed"],
       "canParallel": false,
       "executionStage": 1,
-      "searchQuery": "Optimized real-world search query if type is search, otherwise null",
+      "searchQuery": "Targeted search keywords if type is search, otherwise null",
       "artifactLanguage": "html | cpp | python | javascript | java | css | sql | typescript",
-      "artifactTitle": "Short title for code if type is code"
+      "artifactTitle": "Concise title for code artifact if type is code"
     }
   ]
 }
 
-INTENT CLASSIFICATION RULES (CRITICAL):
-${hasImage ? `0. VISION & SCREENSHOT ANALYSIS (When image/screenshot is attached):
-   - ALWAYS set "needsClarification": false.
-   - If user asks to convert screenshot to code or build what is seen:
-     * Node 1: "vision" (id: "node_vision", name: "Visual Blueprint Inspection", task: "Analyze UI layout, colors, and components from screenshot")
-     * Node 2: "code" (id: "node_code", name: "Code Implementation", task: "Implement clean, production-ready code based on visual blueprint", inputFrom: ["node_vision"])
-     * Node 3: "synthesis" (id: "node_synthesis", name: "Synthesis & Guide", inputFrom: ["node_code"])
-   - If user asks to analyze, explain, transcribe, or asks "ismy kya ha" / "what is this":
-     * Node 1: "vision" (id: "node_vision", name: "Visual Analysis & Comprehension", task: "Analyze the image thoroughly and explain its content in depth")
-` : ''}
-1. RESEARCH & INFORMATION RETRIEVAL (Web Search + Synthesis):
-   - Triggers: Any request to search Google/web, find facts, companies, people, CEOs, employees, developers, news, reviews, or prices.
-   - Pipeline:
-     * Node 1: "search" (Live Tavily search with clean, targeted keywords)
-     * Node 2: "synthesis" (Synthesize strictly from verified search snippets)
-   - NEVER create a "code" node for search or question queries unless the user specifically wrote "write a python script / code to search google".
-
-2. CODE & UI BUILD (Code + Architecture Notes):
-   - Triggers: Explicit requests to program, build, code, or fix software/UI.
-   - Examples: "build a modern portfolio in html", "write python binary search", "fix this react error", "create landing page".
-   - Pipeline:
-     * Node 1: "code" (100% complete, working code to canvas)
-     * Node 2: "synthesis" (3-4 bullet point architecture summary)
-
-3. CONTEXT CONTINUITY & FOLLOW-UP RESOLUTION:
-   - When the user asks a brief follow-up:
-     * ALWAYS resolve the entity and topic from the prior conversation history!
-     * NEVER ask for clarification or present MCQs on follow-ups when the context is already known from previous messages!
-
-4. STRICT CLARIFICATION & MCQ RULES:
-   - ONLY trigger clarification ("needsClarification": true) when ALL of the following are true:
-     a) It is a brand new, highly underspecified creation task (e.g. "make an app", "create a website", "write a game").
-     b) There is NO conversation history or image clarifying what kind of app or style is wanted.
-   - DO NOT trigger clarification for image uploads, search queries, factual questions, follow-ups, bug fixes, or clear instructions.
-
-5. CAPABILITY BOUNDARY:
-   - ONLY set "cannotPerform": true for truly physical or impossible real-world tasks (e.g. "deliver a pizza to my house", "call my phone").`;
+AUTONOMOUS THINKING & DOMAIN DECOMPOSITION GUIDELINES:
+1. WEBSITES, FULL APPS, E-COMMERCE & CANVAS PROJECTS:
+   - When building runnable websites, e-commerce stores, or SaaS tools:
+     * Node 1: "analysis" (Complete System Architecture, Data Schema & Component Hierarchy)
+     * Node 2: "code" (100% complete, standalone interactive UI in Code Canvas - artifactLanguage: "html" or "javascript")
+     * Node 3: "analysis" or "code" (Backend API Endpoints, REST Controllers & Database Models)
+     * Node 4: "cmd" (Exact copy-pasteable PowerShell/CMD runner commands: npm install, run dev, django runserver, docker-compose)
+2. CLI SETUP, ENVIRONMENT, GIT & DEPLOYMENT:
+   - When user asks to setup, install packages, configure Git, deploy, or run terminal tasks:
+     * Node 1: "cmd" (Exact, structured Windows CMD/PowerShell commands with one-click copy)
+     * Node 2: "synthesis" (Verification checklist)
+3. COMPLEX ARCHITECTURAL ROADMAPS & TECHNICAL STRATEGY:
+   - Node 1: "analysis" (Architecture, Schema & Data Modeling)
+   - Node 2: "synthesis" (Actionable Roadmap & Milestones)
+4. REAL-TIME FACTUAL & RESEARCH QUERIES:
+   - Node 1: "search" (Clean, noise-free search query keywords)
+   - Node 2: "synthesis" (Grounded, verified fact synthesis)
+5. CASUAL GREETINGS & SHORT FOLLOW-UPS:
+   - Zero unnecessary nodes ("nodes": []). Instant high-speed conversational response.`;
 
   const historySummary = messagesHistory.length > 0
     ? messagesHistory.slice(-8).map(m => {
@@ -186,15 +185,19 @@ ${hasImage ? `0. VISION & SCREENSHOT ANALYSIS (When image/screenshot is attached
     : [apiKey].filter(Boolean);
 
   const modelsToTry = [
-    model || 'groq/compound-mini',
+    'llama-3.3-70b-versatile',
+    'groq/compound-mini',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b'
   ];
 
   for (const currentModel of modelsToTry) {
+    let modelExhausted = false;
     for (let i = 0; i < keysToTry.length; i++) {
+      if (modelExhausted) break;
       const key = keysToTry[i];
       try {
+        const isLowTpm = currentModel.includes('gpt-oss');
         const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -208,21 +211,23 @@ ${hasImage ? `0. VISION & SCREENSHOT ANALYSIS (When image/screenshot is attached
               {
                 role: 'user',
                 content: historySummary
-                  ? `Prior conversation history:\n${historySummary}\n\nCurrent user request: "${prompt}"`
+                  ? `Prior conversation history:\n${historySummary.slice(0, isLowTpm ? 2000 : 8000)}\n\nCurrent user request: "${prompt}"`
                   : `Current user request: "${prompt}"`
               }
             ],
             temperature: 0.1,
-            max_tokens: 700
+            max_tokens: isLowTpm ? 2000 : 3000
           }),
-          signal: AbortSignal.timeout(6000)
+          signal: AbortSignal.timeout(10000)
         });
 
         if (!res.ok) {
-          if (res.status === 429 || res.status === 401) {
-            continue; // Try next key in pool
+          const errData = await res.json().catch(() => ({}));
+          const errMsg = errData.error?.message || '';
+          if (errMsg.includes('TPD') || errMsg.includes('tokens per day') || res.status === 413) {
+            modelExhausted = true;
           }
-          throw new Error(`Planner HTTP ${res.status}`);
+          continue; // Try next key or model
         }
 
         const json = await res.json();
@@ -243,6 +248,44 @@ ${hasImage ? `0. VISION & SCREENSHOT ANALYSIS (When image/screenshot is attached
 
         if (plan && typeof plan === 'object') {
           if (!Array.isArray(plan.nodes)) plan.nodes = [];
+          // Filter out any standalone synthesis nodes from tree nodes since synthesis is the final response deliverable
+          plan.nodes = plan.nodes.filter(n => n.type !== 'synthesis');
+
+          // STRICT FILTER PRIORITY: If user enabled Google Search filter
+          if (forceWebSearch && !plan.needsClarification) {
+            if (!plan.nodes.some(n => n.type === 'search' || /search|research/i.test(n.type))) {
+              const cleanQuery = prompt.replace(/google py|google pe|search karo|dhoondo|btao/gi, '').trim() || prompt;
+              plan.nodes.unshift({
+                id: 'node_forced_search',
+                name: 'Real-Time Web Grounding',
+                type: 'search',
+                task: `Execute real-time web search for: "${cleanQuery}"`,
+                inputFrom: [],
+                canParallel: false,
+                executionStage: 1,
+                searchQuery: cleanQuery
+              });
+            }
+          }
+
+          // STRICT FILTER PRIORITY: If user enabled Canvas Code filter
+          if (forceCanvasCode && !plan.needsClarification) {
+            if (!plan.nodes.some(n => n.type === 'code' || /code|artifact|build/i.test(n.type))) {
+              const isHtml = /\b(html|css|website|dashboard|ui|ecommerce|react|store|canvas|frontend)\b/i.test(prompt);
+              plan.nodes.push({
+                id: 'node_forced_canvas_code',
+                name: isHtml ? 'Interactive Canvas UI' : 'Canvas Code Implementation',
+                type: 'code',
+                task: `Generate 100% complete, standalone runnable code for: "${prompt}" into Code Canvas`,
+                inputFrom: plan.nodes.map(n => n.id),
+                canParallel: false,
+                executionStage: plan.nodes.length + 1,
+                artifactLanguage: isHtml ? 'html' : 'python',
+                artifactTitle: prompt.slice(0, 36)
+              });
+            }
+          }
+
           return plan;
         }
       } catch (err) {
@@ -277,7 +320,7 @@ ${hasImage ? `0. VISION & SCREENSHOT ANALYSIS (When image/screenshot is attached
   
   // Distinguish search intents vs code intents in English and Roman Urdu
   const isSearchCommand = /\b(google|search|dhoondo|dhundo|pata karo|btao|batayein|koun|kaun|who|what|where|current|latest|news|info|details|list|employees|developers|ceo)\b/i.test(lower);
-  const isExplicitCodeRequest = /\b(code likho|script banao|html banao|program likho|write code|write script|create app|build website|implement class|write a python script|develop app)\b/i.test(lower);
+  const isExplicitCodeRequest = /\b(code likho|script banao|html banao|program likho|write code|write script|create app|build website|implement class|write a python script|develop app|ecommerce|canvas|django|react|full-stack|node|store|shop|files)\b/i.test(lower);
   const looksLikeGreeting = lower.length < 18 && /\b(hi|hello|hey|salam|assalam|hola|sup|good morning|kese ho)\b/i.test(lower);
 
   if (looksLikeGreeting) {
@@ -293,7 +336,44 @@ ${hasImage ? `0. VISION & SCREENSHOT ANALYSIS (When image/screenshot is attached
   const fallbackNodes = [];
   let stage = 1;
 
-  if (isSearchCommand || (!isExplicitCodeRequest && !looksLikeGreeting)) {
+  if (isExplicitCodeRequest) {
+    const isHtml = matched.id === 'frontend-design' || /\b(html|css|website|dashboard|ui|ecommerce|react|store|canvas)\b/i.test(lower);
+    
+    // Stage 1: Architecture & Schema
+    fallbackNodes.push({
+      id: 'node_arch_spec',
+      name: 'System Architecture & Schema Blueprint',
+      type: 'analysis',
+      task: `Architect data models, state schema, and component structure for: "${prompt}"`,
+      inputFrom: [],
+      canParallel: false,
+      executionStage: stage++
+    });
+
+    // Stage 2: 100% Complete Interactive Code for Canvas
+    fallbackNodes.push({
+      id: 'node_code_impl',
+      name: isHtml ? 'Modern UI/UX & Canvas Implementation' : 'Full Architecture & Code Implementation',
+      type: 'code',
+      task: `Generate 100% complete, production-grade functional code for: "${prompt}"`,
+      inputFrom: ['node_arch_spec'],
+      canParallel: false,
+      executionStage: stage++,
+      artifactLanguage: isHtml ? 'html' : 'python',
+      artifactTitle: prompt.slice(0, 40)
+    });
+
+    // Stage 3: Local Dev Runner Commands
+    fallbackNodes.push({
+      id: 'node_cmd_runner',
+      name: 'Local Setup & Dev Server CLI Runner',
+      type: 'cmd',
+      task: `Provide exact copy-pasteable PowerShell/CMD commands to initialize, run dependencies, and launch the dev server locally for "${prompt}"`,
+      inputFrom: ['node_code_impl'],
+      canParallel: false,
+      executionStage: stage++
+    });
+  } else if (isSearchCommand || !looksLikeGreeting) {
     // Extract clean search query from prompt
     const cleanQuery = prompt
       .replace(/google py|google pe|search karo|pury internet sy dundho|dhoondo|btao/gi, '')
@@ -310,31 +390,6 @@ ${hasImage ? `0. VISION & SCREENSHOT ANALYSIS (When image/screenshot is attached
       searchQuery: cleanQuery.slice(0, 100)
     });
   }
-
-  if (isExplicitCodeRequest) {
-    const isHtml = matched.id === 'frontend-design' || /\b(html|css|website|dashboard|ui)\b/i.test(lower);
-    fallbackNodes.push({
-      id: 'node_code_impl',
-      name: isHtml ? 'Modern UI/UX Implementation' : 'Full Architecture & Code Implementation',
-      type: 'code',
-      task: `Generate 100% complete, production-grade functional code for: "${prompt}"`,
-      inputFrom: fallbackNodes.map(n => n.id),
-      canParallel: false,
-      executionStage: stage++,
-      artifactLanguage: isHtml ? 'html' : 'python',
-      artifactTitle: prompt.slice(0, 40)
-    });
-  }
-
-  fallbackNodes.push({
-    id: 'node_final_synth',
-    name: 'Synthesis & Quality Verification',
-    type: 'synthesis',
-    task: `Synthesize findings with strict factual accuracy for: "${prompt}"`,
-    inputFrom: fallbackNodes.map(n => n.id),
-    canParallel: false,
-    executionStage: stage++
-  });
 
   return {
     cannotPerform: false,

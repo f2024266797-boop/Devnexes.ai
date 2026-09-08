@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @layer base {
   *, *::before, *::after {
     box-sizing: border-box;
@@ -145,27 +147,21 @@ main::-webkit-scrollbar {
   will-change: transform;
 }
 
-/* ── Pipeline Step Reveal (Slow, Buttery Smooth Entrance) ─────── */
+/* ── Pipeline Step Reveal (Slow, Buttery Smooth Fade-Up Entrance) ─────── */
 @keyframes stepReveal {
   0% {
     opacity: 0;
-    transform: translateY(16px) scale(0.98);
-    filter: blur(2px);
-  }
-  60% {
-    opacity: 0.9;
-    filter: blur(0px);
+    transform: translateY(16px);
   }
   100% {
     opacity: 1;
-    transform: translateY(0) scale(1);
-    filter: blur(0px);
+    transform: translateY(0);
   }
 }
 .animate-step-reveal {
   opacity: 0;
   animation: stepReveal 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  will-change: transform, opacity, filter;
+  will-change: transform, opacity;
 }
 
 /* ── Smooth Node Content Expand / Open & Close Animation ──────── */
@@ -180,7 +176,7 @@ main::-webkit-scrollbar {
   }
 }
 .animate-smooth-expand {
-  animation: smoothExpand 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: smoothExpand 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   will-change: transform, opacity;
 }
 
@@ -189,9 +185,9 @@ main::-webkit-scrollbar {
   display: grid;
   grid-template-rows: 0fr;
   opacity: 0;
-  transition: grid-template-rows 0.45s cubic-bezier(0.16, 1, 0.3, 1),
-              opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1),
-              margin 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: grid-template-rows 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+              margin 0.45s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
   contain: content;
   will-change: grid-template-rows, opacity;
@@ -262,3 +258,19 @@ main::-webkit-scrollbar {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* ── Flowing Pill Entrance from Right to Center ──────────────── */
+@keyframes slideInFromRight {
+  0% {
+    opacity: 0;
+    transform: translateX(36px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+.animate-slide-right-center {
+  animation: slideInFromRight 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+

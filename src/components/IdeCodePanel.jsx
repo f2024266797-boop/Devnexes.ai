@@ -90,8 +90,10 @@ export default function IdeCodePanel({
   return (
     <div className="fixed inset-0 z-50 lg:relative lg:inset-auto lg:z-20 lg:w-1/2 xl:w-7/12 flex-1 h-full bg-[#f8fafc] dark:bg-[#0c101b] border-l border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden select-none transition-all duration-300 animate-fade-in shadow-2xl lg:shadow-none font-sans">
       
-      {/* ── Top Bar / Tab Strip ─────────────────────────────────── */}
-      <div className="h-11 sm:h-12 px-2.5 sm:px-4 bg-[#f1f5f9] dark:bg-[#080a0f] border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
+      {/* ── Top Bar / Tab Strip with Mirror Effect ─────────────────────────────────── */}
+      <div className="relative h-11 sm:h-12 px-2.5 sm:px-4 bg-[#f1f5f9]/90 dark:bg-[#080a0f]/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0 overflow-hidden">
+        {/* Mirror Shimmer Highlight Edge */}
+        <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-blue-500/30 dark:via-blue-400/25 to-transparent pointer-events-none" />
         
         {/* Left: File Tab & View Switcher */}
         <div className="flex items-center space-x-1 sm:space-x-2 truncate pr-2">

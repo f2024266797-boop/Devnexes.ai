@@ -3,11 +3,13 @@ import { planDynamicExecutionGraph, formatConversationHistoryWithIndices, getLat
 
 export const DEFAULT_MODEL = 'groq/compound-mini';
 export const FAST_MODEL = 'groq/compound-mini';
+export const PRO_MODEL = 'llama-3.3-70b-versatile';
 export const VISION_MODEL = 'qwen/qwen3.6-27b';
 
 export const AVAILABLE_MODELS = [
   { id: 'groq/compound-mini', name: 'Devnexes Fast' },
-  { id: 'openai/gpt-oss-120b', name: 'Devnexes Pro' }
+  { id: 'llama-3.3-70b-versatile', name: 'Devnexes Pro (Llama 3.3 70B)' },
+  { id: 'openai/gpt-oss-120b', name: 'Devnexes Ultra' }
 ];
 
 export const VISION_FALLBACK_MODELS = [
@@ -16,12 +18,22 @@ export const VISION_FALLBACK_MODELS = [
 ];
 
 const RESILIENT_FALLBACK_MODELS = [
+  'llama-3.3-70b-versatile',
   'groq/compound-mini',
   'groq/compound',
-  'openai/gpt-oss-20b',
   'openai/gpt-oss-120b',
+  'openai/gpt-oss-20b',
   'qwen/qwen3.6-27b'
 ];
+
+export function cleanMetaPlanningPreamble(text) {
+  if (!text) return '';
+  return text
+    .replace(/^The user wants\b[\s\S]*?(?:Plan Strategy\b[\s\S]*?Success Goal\b[\s\S]*?\n\n|Success Goal\b[\s\S]*?\n\n)/i, '')
+    .replace(/^Plan Strategy\b[\s\S]*?Success Goal\b[\s\S]*?\n\n/i, '')
+    .replace(/^Stage\s*\d+:[\s\S]*?Success Goal[\s\S]*?\n\n/i, '')
+    .trimStart();
+}
 
 let activeKeyIndex = 0;
 const keyCooldowns = new Map(); // key -> cooldownUntilTimestamp
@@ -110,14 +122,6 @@ export async function streamGroqChat({ messages, model = DEFAULT_MODEL, apiKey, 
   // Detect if messages contain multimodal image content
   const hasVisionPayload = messages.some(m => Array.isArray(m.content) && m.content.some(c => c.type === 'image_url'));
 
-  // Ensure safe message payload size to prevent 413 and 429 TPM errors on free tier
-  const safeMessages = messages.map(m => {
-    if (typeof m.content === 'string' && m.content.length > 12000) {
-      return { ...m, content: m.content.slice(0, 12000) };
-    }
-    return m;
-  });
-
   const modelsToTry = hasVisionPayload
     ? [VISION_MODEL, ...VISION_FALLBACK_MODELS.filter(m => m !== VISION_MODEL)]
     : [model, ...RESILIENT_FALLBACK_MODELS.filter(m => m !== model)];
@@ -125,9 +129,24 @@ export async function streamGroqChat({ messages, model = DEFAULT_MODEL, apiKey, 
   let lastError = null;
 
   for (const currentModel of modelsToTry) {
+    // Model-specific TPM & context length budgeting
+    const isLowTpmModel = currentModel.includes('gpt-oss');
+    const safeMaxChars = isLowTpmModel ? 5500 : 14000;
+    const modelMaxTokens = isLowTpmModel ? Math.min(maxTokens || 2500, 2500) : (maxTokens ? Math.min(maxTokens, 8192) : 8192);
+
+    const safeMessages = messages.map(m => {
+      if (typeof m.content === 'string' && m.content.length > safeMaxChars) {
+        return { ...m, content: m.content.slice(0, safeMaxChars) };
+      }
+      return m;
+    });
+
     const totalAttempts = availableKeys.length;
+    let modelQuotaExhausted = false;
 
     for (let attempt = 0; attempt < totalAttempts; attempt++) {
+      if (modelQuotaExhausted) break;
+
       const keyIdx = (activeKeyIndex + attempt) % availableKeys.length;
       const keyToUse = availableKeys[keyIdx];
 
@@ -143,7 +162,7 @@ export async function streamGroqChat({ messages, model = DEFAULT_MODEL, apiKey, 
             messages: safeMessages,
             temperature: 0.2,
             stream: true,
-            ...(maxTokens ? { max_tokens: maxTokens } : {})
+            max_tokens: modelMaxTokens
           }),
           signal: AbortSignal.timeout(12000)
         });
@@ -151,13 +170,18 @@ export async function streamGroqChat({ messages, model = DEFAULT_MODEL, apiKey, 
         if (!response.ok) {
           const errJson = await response.json().catch(() => ({}));
           const errMsg = errJson.error?.message || `HTTP ${response.status}`;
-          console.warn(`[Groq Failover] Key #${keyIdx + 1} with ${currentModel} returned ${response.status}: ${errMsg}. Rotating to next API key...`);
+          console.warn(`[Groq Failover] Key #${keyIdx + 1} with ${currentModel} returned ${response.status}: ${errMsg}`);
+
+          // If daily quota or organization TPM is reached for this model, advance to next model immediately
+          if (errMsg.includes('tokens per day (TPD)') || errMsg.includes('TPD') || response.status === 413) {
+            modelQuotaExhausted = true;
+          }
           if (response.status === 429 || response.status === 413) {
             markKeyCooldown(keyToUse);
           }
           activeKeyIndex = (keyIdx + 1) % availableKeys.length;
           lastError = new Error(errMsg);
-          continue; // Instantly try next key in the pool
+          continue;
         }
 
         // Successful connection: update active index to this working key
@@ -319,7 +343,9 @@ export async function generateDynamicAgentPipeline({
   onStepUpdate,
   onChunk,
   onError,
-  messagesHistory = []
+  messagesHistory = [],
+  forceWebSearch = false,
+  forceCanvasCode = false
 }) {
   const allKeys = getAllGroqApiKeys();
   const keyToUse = apiKey || getGroqApiKey();
@@ -340,7 +366,9 @@ export async function generateDynamicAgentPipeline({
     image: userImage,
     apiKey: allKeys.length > 0 ? allKeys : [keyToUse],
     model,
-    messagesHistory
+    messagesHistory,
+    forceWebSearch,
+    forceCanvasCode
   });
 
   // Ensure vision node exists if image is provided
@@ -395,8 +423,8 @@ export async function generateDynamicAgentPipeline({
     return { hasCode: false };
   }
 
-  // Pure Casual Greeting or Conversational questions (when no image attached) -> Fast Direct Stream
-  if (!userImage && (plan.intentCategory === 'GREETING' || plan.intentCategory === 'CONVERSATION' || !plan.nodes || plan.nodes.length === 0)) {
+  // Pure Casual Greeting or Conversational questions (when no image attached & NO forced filters active) -> Fast Direct Stream
+  if (!forceWebSearch && !forceCanvasCode && !userImage && (plan.intentCategory === 'GREETING' || plan.intentCategory === 'CONVERSATION' || !plan.nodes || plan.nodes.length === 0)) {
     const steps = [{ type: 'response', content: '' }];
     if (onStepUpdate) onStepUpdate(steps, true);
 
@@ -426,13 +454,43 @@ Answer the user's prompt directly, naturally, and concisely in the user's langua
     return { hasCode: false };
   }
 
-  // ── STAGE 1: Initialize Real Graph Nodes in UI ─────────────────
+  // ── STAGE 1: Initialize Thinking Node in UI ───────────────────
   const activeSkill = DETAILED_SKILLS[plan.skillId] || DETAILED_SKILLS['web-research-analyst'];
   
-  // Transform planned nodes into active execution steps
+  // Guarantee forced filters are present in plan nodes
+  if (forceWebSearch && !plan.nodes.some(n => n.type === 'search' || /search|research/i.test(n.type))) {
+    const cleanQuery = userPrompt.replace(/google py|google pe|search karo|dhoondo|btao/gi, '').trim() || userPrompt;
+    plan.nodes.unshift({
+      id: 'node_forced_search',
+      name: 'Real-Time Web Grounding',
+      type: 'search',
+      task: `Execute real-time web search for: "${cleanQuery}"`,
+      inputFrom: [],
+      canParallel: false,
+      executionStage: 1,
+      searchQuery: cleanQuery
+    });
+  }
+
+  if (forceCanvasCode && !plan.nodes.some(n => n.type === 'code' || /code|artifact|build/i.test(n.type))) {
+    const isHtml = /\b(html|css|website|dashboard|ui|ecommerce|react|store|canvas|frontend)\b/i.test(userPrompt);
+    plan.nodes.push({
+      id: 'node_forced_canvas_code',
+      name: isHtml ? 'Interactive Canvas UI' : 'Canvas Code Implementation',
+      type: 'code',
+      task: `Generate 100% complete, standalone runnable code for: "${userPrompt}" into Code Canvas`,
+      inputFrom: plan.nodes.map(n => n.id),
+      canParallel: false,
+      executionStage: plan.nodes.length + 1,
+      artifactLanguage: isHtml ? 'html' : 'python',
+      artifactTitle: userPrompt.slice(0, 36)
+    });
+  }
+
+  // Start with ONLY the thinking node — subsequent nodes will be created strictly one-by-one
   const traceSteps = [];
 
-  // Add Dynamic Graph Architecture / Thinking node first with full DAG metadata
+  // Add Dynamic Graph Architecture / Thinking node
   traceSteps.push({
     id: 'node_thinking_plan',
     name: 'Dynamic Graph Architecture',
@@ -445,28 +503,6 @@ Answer the user's prompt directly, naturally, and concisely in the user's langua
     isStreaming: false
   });
 
-  // Add all dynamically planned nodes with 'pending' status
-  for (const node of plan.nodes) {
-    traceSteps.push({
-      id: node.id,
-      name: node.name,
-      type: node.type,
-      status: 'pending', // 'pending' | 'running' | 'completed' | 'error'
-      task: node.task,
-      image: node.type === 'vision' ? userImage : null,
-      inputFrom: node.inputFrom || [],
-      canParallel: !!node.canParallel,
-      executionStage: node.executionStage || 1,
-      content: '',
-      code: '',
-      language: node.artifactLanguage || 'html',
-      title: node.artifactTitle || node.name,
-      query: node.searchQuery || null,
-      results: [],
-      isStreaming: false
-    });
-  }
-
   // Add final response placeholder
   traceSteps.push({ type: 'response', content: '' });
   if (onStepUpdate) onStepUpdate([...traceSteps]);
@@ -475,23 +511,43 @@ Answer the user's prompt directly, naturally, and concisely in the user's langua
   const nodeOutputs = {};
   let hasCode = false;
 
-  // ── STAGE 2: Execute Nodes by Dependency Stages ───────────────
+  // ── STAGE 2: Progressively Create & Execute Nodes One-by-One ───
   const stages = Array.from(new Set(plan.nodes.map(n => n.executionStage || 1))).sort((a, b) => a - b);
 
   for (const currentStage of stages) {
-    const stageNodes = traceSteps.filter(s => s.type !== 'response' && s.type !== 'thinking' && s.executionStage === currentStage);
+    const stagePlannedNodes = plan.nodes.filter(n => (n.executionStage || 1) === currentStage);
 
-    // Function to execute a single node
-    const executeNode = async (node) => {
-      const nodeIdx = traceSteps.findIndex(s => s.id === node.id);
-      if (nodeIdx === -1) return;
+    for (const nodeConfig of stagePlannedNodes) {
+      // 1. Create and inject THIS node into traceSteps ONLY NOW (when ready to execute)
+      const activeNode = {
+        id: nodeConfig.id,
+        name: nodeConfig.name,
+        type: nodeConfig.type,
+        status: 'running',
+        task: nodeConfig.task,
+        image: nodeConfig.type === 'vision' ? userImage : null,
+        inputFrom: nodeConfig.inputFrom || [],
+        canParallel: !!nodeConfig.canParallel,
+        executionStage: nodeConfig.executionStage || 1,
+        content: '',
+        code: '',
+        language: nodeConfig.artifactLanguage || 'html',
+        title: nodeConfig.artifactTitle || nodeConfig.name,
+        query: nodeConfig.searchQuery || null,
+        results: [],
+        isStreaming: true
+      };
 
-      traceSteps[nodeIdx].status = 'running';
-      traceSteps[nodeIdx].isStreaming = true;
+      const respIdx = traceSteps.findIndex(s => s.type === 'response');
+      if (respIdx !== -1) {
+        traceSteps.splice(respIdx, 0, activeNode);
+      } else {
+        traceSteps.push(activeNode);
+      }
       if (onStepUpdate) onStepUpdate([...traceSteps]);
 
       // Collect inputs from predecessor nodes
-      const dependencyContexts = (node.inputFrom || [])
+      const dependencyContexts = (nodeConfig.inputFrom || [])
         .map(depId => {
           const out = nodeOutputs[depId];
           return out ? `[Output from ${depId}]:\n${out}` : null;
@@ -499,13 +555,20 @@ Answer the user's prompt directly, naturally, and concisely in the user's langua
         .filter(Boolean)
         .join('\n\n');
 
+      const getNodeIdx = () => traceSteps.findIndex(s => s.id === activeNode.id);
+
       try {
-        // ── VISION / SCREENSHOT INSPECTION NODE ──────────────────
-        if (node.type === 'vision') {
-          const imgToAnalyze = node.image || userImage;
+        const isSearchType = /search|research|lookup|google/i.test(activeNode.type);
+        const isCodeType = /code|artifact|implementation|build|coding|develop/i.test(activeNode.type);
+        const isCmdType = /cmd|terminal|cli|command|runner|powershell/i.test(activeNode.type);
+        const isVisionType = /vision|image|ocr/i.test(activeNode.type);
+
+        // ── 1. VISION / SCREENSHOT INSPECTION NODE ───────────────
+        if (isVisionType) {
+          const imgToAnalyze = activeNode.image || userImage;
           let visionResult = '';
-          const hasSubsequentDeliverable = plan.nodes.some(n => n.id !== node.id && (n.type === 'synthesis' || n.type === 'code' || n.type === 'analysis'));
-          const respIdx = traceSteps.findIndex(s => s.type === 'response');
+          const hasSubsequentDeliverable = plan.nodes.some(n => n.id !== activeNode.id);
+          const currentRespIdx = traceSteps.findIndex(s => s.type === 'response');
 
           const visionSystemPrompt = `You are Devnexes Vision Engine — a world-class, highly intelligent multimodal visual AI.
 Analyze the provided image/screenshot with deep intelligence, precision, and natural communication.
@@ -513,13 +576,8 @@ Analyze the provided image/screenshot with deep intelligence, precision, and nat
 User Query / Intent: "${userPrompt || 'Is image mein kya hai, tafseel se batayein'}"
 
 COMMUNICATION & LANGUAGE GUIDELINES:
-1. Seamlessly understand Roman Urdu, Hindi, Urdu, and English. If the user asks in Roman Urdu (e.g., "ismy kya ha", "ye kya hai", "kya likha hai", "check this"), provide a natural, smart, and articulate response in the user's preferred language.
-2. ADAPTIVE & INTELLIGENT COMPREHENSION (DO NOT use rigid, repetitive, or robotic boilerplate form templates):
-   - **For Lifestyle / Fashion / People / Photography**: Describe the subject, person, pose, outfit details (colors, shirts, pants, footwear, accessories), background setting, lighting, and overall aesthetic naturally and thoroughly.
-   - **For UI / Web / Mobile App Screenshots**: Explain the visual hierarchy, UI components, color palette, typography, design pattern, and product functionality.
-   - **For Code / Errors / Terminal Logs**: Transcribe the exact error or code verbatim, diagnose the root cause with high accuracy, and provide the concrete solution.
-   - **For Documents / Charts / Infographics**: Extract text cleanly and synthesize the key insights and data points.
-3. Keep the tone natural, professional, and directly helpful without repeating the same sentence or adding robotic disclaimers.`;
+1. Understand Roman Urdu, Hindi, Urdu, and English natively.
+2. Provide a thorough, articulate analysis matching the image type (UI screenshot, error log, photo, document).`;
 
           const poolKeysToUse = allKeys.length > 0 ? allKeys : [keyToUse];
 
@@ -529,7 +587,7 @@ COMMUNICATION & LANGUAGE GUIDELINES:
               {
                 role: 'user',
                 content: [
-                  { type: 'text', text: userPrompt ? `User prompt: ${userPrompt}\nAnalyze this image/screenshot in detail.` : 'Analyze this image/screenshot in detail.' },
+                  { type: 'text', text: userPrompt ? `User prompt: ${userPrompt}\nAnalyze this image in detail.` : 'Analyze this image in detail.' },
                   { type: 'image_url', image_url: { url: imgToAnalyze } }
                 ]
               }
@@ -538,69 +596,71 @@ COMMUNICATION & LANGUAGE GUIDELINES:
             apiKey: poolKeysToUse,
             onChunk: (delta, fullText) => {
               visionResult = fullText;
-              if (!hasSubsequentDeliverable && respIdx !== -1) {
-                traceSteps[respIdx].content = fullText;
+              const idx = getNodeIdx();
+              if (!hasSubsequentDeliverable && currentRespIdx !== -1) {
+                traceSteps[currentRespIdx].content = fullText;
                 if (onChunk) onChunk(delta, fullText);
-              } else {
-                traceSteps[nodeIdx].content = fullText;
+              } else if (idx !== -1) {
+                traceSteps[idx].content = fullText;
               }
               if (onStepUpdate) onStepUpdate([...traceSteps]);
             },
             maxTokens: 2500
           });
 
-          traceSteps[nodeIdx].status = 'completed';
-          traceSteps[nodeIdx].isStreaming = false;
-          if (!hasSubsequentDeliverable) {
-            traceSteps[nodeIdx].content = 'Visual inspection completed.';
+          const idx = getNodeIdx();
+          if (idx !== -1) {
+            traceSteps[idx].status = 'completed';
+            traceSteps[idx].isStreaming = false;
+            if (!hasSubsequentDeliverable) {
+              traceSteps[idx].content = 'Visual inspection completed.';
+            }
           }
-          nodeOutputs[node.id] = visionResult;
+          nodeOutputs[activeNode.id] = visionResult;
           if (onStepUpdate) onStepUpdate([...traceSteps]);
         }
 
-        // ── SEARCH NODE ──────────────────────────────────────────
-        else if (node.type === 'search') {
-          const query = node.query || userPrompt;
+        // ── 2. SEARCH NODE (REAL TAVILY / WIKI SEARCH) ───────────
+        else if (isSearchType) {
+          const query = activeNode.query || userPrompt;
           const searchResults = await realTavilySearch(query);
 
-          traceSteps[nodeIdx].results = searchResults;
-          traceSteps[nodeIdx].status = 'completed';
-          traceSteps[nodeIdx].isStreaming = false;
+          const idx = getNodeIdx();
+          if (idx !== -1) {
+            traceSteps[idx].results = searchResults;
+            traceSteps[idx].status = 'completed';
+            traceSteps[idx].isStreaming = false;
+          }
 
-          const searchSummary = searchResults.map((r, idx) => 
-            `[Source #${idx + 1} | ${r.title}]\nVerified URL: ${r.url}\nDomain: ${r.domain}\nVerified Content: ${r.snippet}`
+          const searchSummary = searchResults.map((r, sIdx) => 
+            `--- Research Finding #${sIdx + 1} (${r.domain}): ${r.title} ---\nInformation: ${r.snippet}\nVerified Link: ${r.url}`
           ).join('\n\n');
 
-          nodeOutputs[node.id] = searchSummary || `Search conducted for: "${query}" (no public results returned)`;
+          nodeOutputs[activeNode.id] = searchSummary || `Search conducted for: "${query}" (${searchResults.length} sources found)`;
           if (onStepUpdate) onStepUpdate([...traceSteps]);
         }
 
-        // ── CODE GENERATION NODE ─────────────────────────────────
-        else if (node.type === 'code') {
+        // ── 3. CODE GENERATION NODE ──────────────────────────────
+        else if (isCodeType) {
           hasCode = true;
-          const lang = node.language || 'html';
+          const lang = activeNode.language || 'html';
           const latestArtifact = getLatestCodeArtifact(messagesHistory);
           
           const codeSystemPrompt = `${activeSkill.systemPrompt}
 
-You are executing Node: "${node.name}".
-Task: ${node.task}
+You are executing Node: "${activeNode.name}".
+Task: ${activeNode.task}
 Target Language: ${lang}
 
 CRITICAL RULES:
-- You MUST output 100% COMPLETE, WORKING, PRODUCTION-READY ${lang.toUpperCase()} source code.
+- Output 100% COMPLETE, WORKING, PRODUCTION-READY ${lang.toUpperCase()} source code.
 - Start IMMEDIATELY with the markdown code fence: \`\`\`${lang}
-- Do NOT output any introductory or conversational text before the code block.
-- Zero placeholders, zero TODOs, zero simulated code.
-- CODE MODIFICATION & CONTINUITY CONTRACT:
-  * When modifying or adding features to existing code (e.g. adding JS, adding sections, styling, responsive enhancements, fixing bugs), you MUST base your work directly on the PREVIOUS EXISTING CODE provided below.
-  * PRESERVE all existing brand names (e.g. Acme Corp), copy, layout, styling, and sections. Do NOT throw away the user's previous design or replace it with an unrelated generic template!
-  * Seamlessly integrate the requested enhancements, JavaScript, CSS animations, or new components directly into the existing codebase.
+- Zero placeholders, zero TODOs.
 - End cleanly with \`\`\`.`;
 
-          let codeUserPrompt = `User Request: "${userPrompt}"\n\nTask: ${node.task}`;
+          let codeUserPrompt = `User Request: "${userPrompt}"\n\nTask: ${activeNode.task}`;
           if (latestArtifact && latestArtifact.code) {
-            codeUserPrompt = `User Request: "${userPrompt}"\n\n=== PREVIOUS EXISTING CODE (Base your modifications on this exact code. Preserve all existing sections, branding, and design): ===\n\`\`\`${latestArtifact.language}\n${latestArtifact.code}\n\`\`\`\n\nTask: ${node.task}`;
+            codeUserPrompt = `User Request: "${userPrompt}"\n\n=== PREVIOUS EXISTING CODE (Base your modifications on this exact code): ===\n\`\`\`${latestArtifact.language}\n${latestArtifact.code}\n\`\`\`\n\nTask: ${activeNode.task}`;
           }
           if (dependencyContexts) {
             codeUserPrompt += `\n\nContext from previous execution stages:\n${dependencyContexts}`;
@@ -617,28 +677,78 @@ CRITICAL RULES:
             model,
             apiKey: poolKeysToUse,
             onChunk: (delta, fullText) => {
-              traceSteps[nodeIdx].code = fullText;
-              if (onStepUpdate) onStepUpdate([...traceSteps]);
+              const idx = getNodeIdx();
+              if (idx !== -1) {
+                traceSteps[idx].code = fullText;
+                if (onStepUpdate) onStepUpdate([...traceSteps]);
+              }
             }
           });
 
-          traceSteps[nodeIdx].status = 'completed';
-          traceSteps[nodeIdx].isStreaming = false;
-          nodeOutputs[node.id] = traceSteps[nodeIdx].code;
+          const idx = getNodeIdx();
+          if (idx !== -1) {
+            traceSteps[idx].status = 'completed';
+            traceSteps[idx].isStreaming = false;
+            nodeOutputs[activeNode.id] = traceSteps[idx].code;
+          }
           if (onStepUpdate) onStepUpdate([...traceSteps]);
         }
 
-        // ── ANALYSIS / ARCHITECTURE NODE ─────────────────────────
-        else if (node.type === 'analysis') {
+        // ── 4. CMD / TERMINAL RUNNER NODE ────────────────────────
+        else if (isCmdType) {
+          const cmdSystemPrompt = `${activeSkill.systemPrompt}
+
+You are Devnexes CLI Engine. Executing Node: "${activeNode.name}".
+Task: ${activeNode.task}
+
+CRITICAL RULES:
+1. Output ONLY 1 to 3 exact, minimal, copy-pasteable Windows CMD / PowerShell commands to run or serve this project locally.
+2. Structure with clean short comment labels (e.g. "# 1. Launch local live server").
+3. DO NOT output long paragraphs, explanations, or essays. Only the clean commands and concise comments.`;
+
+          const cmdUserPrompt = dependencyContexts
+            ? `User Request: "${userPrompt}"\n\nProject Context:\n${dependencyContexts.slice(0, 500)}\n\nTask: ${activeNode.task}`
+            : `User Request: "${userPrompt}"\n\nTask: ${activeNode.task}`;
+
+          const poolKeysToUse = allKeys.length > 0 ? allKeys : [keyToUse];
+
+          await streamGroqChat({
+            messages: [
+              { role: 'system', content: cmdSystemPrompt },
+              ...pastContext,
+              { role: 'user', content: cmdUserPrompt }
+            ],
+            model,
+            apiKey: poolKeysToUse,
+            onChunk: (delta, fullText) => {
+              const idx = getNodeIdx();
+              if (idx !== -1) {
+                traceSteps[idx].content = fullText;
+                if (onStepUpdate) onStepUpdate([...traceSteps]);
+              }
+            }
+          });
+
+          const idx = getNodeIdx();
+          if (idx !== -1) {
+            traceSteps[idx].status = 'completed';
+            traceSteps[idx].isStreaming = false;
+            nodeOutputs[activeNode.id] = traceSteps[idx].content;
+          }
+          if (onStepUpdate) onStepUpdate([...traceSteps]);
+        }
+
+        // ── 5. GENERAL ANALYSIS / ROADMAP / EXECUTION NODE ───────
+        else {
           const analysisSystemPrompt = `${activeSkill.systemPrompt}
 
-You are executing Node: "${node.name}".
-Task: ${node.task}
-Provide a structured, accurate, line-by-line or section-by-section breakdown. Provide sharp, high-value technical analysis.`;
+You are executing Node: "${activeNode.name}".
+Task: ${activeNode.task}
+Provide a sharp, accurate, high-density technical analysis or direct findings for this step with zero generic filler.`;
 
           const analysisUserPrompt = dependencyContexts
-            ? `User Request: "${userPrompt}"\n\nPrior Stage Findings:\n${dependencyContexts}\n\nTask: ${node.task}`
-            : `User Request: "${userPrompt}"\n\nTask: ${node.task}`;
+            ? `User Request: "${userPrompt}"\n\nPrior Stage Findings:\n${dependencyContexts}\n\nTask: ${activeNode.task}`
+            : `User Request: "${userPrompt}"\n\nTask: ${activeNode.task}`;
 
           const poolKeysToUse = allKeys.length > 0 ? allKeys : [keyToUse];
 
@@ -651,111 +761,81 @@ Provide a structured, accurate, line-by-line or section-by-section breakdown. Pr
             model,
             apiKey: poolKeysToUse,
             onChunk: (delta, fullText) => {
-              traceSteps[nodeIdx].content = fullText;
-              if (onStepUpdate) onStepUpdate([...traceSteps]);
+              const idx = getNodeIdx();
+              if (idx !== -1) {
+                traceSteps[idx].content = fullText;
+                if (onStepUpdate) onStepUpdate([...traceSteps]);
+              }
             }
           });
 
-          traceSteps[nodeIdx].status = 'completed';
-          traceSteps[nodeIdx].isStreaming = false;
-          nodeOutputs[node.id] = traceSteps[nodeIdx].content;
-          if (onStepUpdate) onStepUpdate([...traceSteps]);
-        }
-
-        // ── SYNTHESIS NODE ───────────────────────────────────────
-        else if (node.type === 'synthesis') {
-          const synthSystemPrompt = `${activeSkill.systemPrompt}
-
-You are executing the Final Synthesis Node: "${node.name}".
-
-CRITICAL OUTPUT & SYNTHESIS RULES:
-1. CODE DUMP PROHIBITION: ${hasCode ? 'The complete source code has ALREADY been generated directly into the interactive Canvas & Code Panel. You MUST NOT repeat, duplicate, or dump the source code in this text response! Do NOT output massive code blocks.' : 'Provide a concise, verified response.'}
-2. Provide a clean, structured overview:
-   - Summary of what was created or modified.
-   - Key architectural decisions & features added (e.g. JavaScript interactivity, animations, responsive design).
-   - Quick instructions for previewing in Canvas.
-3. GROUNDING: Base all factual claims strictly on verified data. No hallucinated URLs or fake data.
-4. LANGUAGE: Answer naturally and clearly in the user's language (English or Roman Urdu).`;
-
-          const allOutputs = Object.entries(nodeOutputs)
-            .map(([k, v]) => `=== Verified Data from [${k}] ===\n${v.slice(0, 4000)}`)
-            .join('\n\n');
-
-          const synthUserPrompt = `User Prompt: "${userPrompt}"\n\nExecution Stage Verified Data:\n${allOutputs}\n\nTask: ${node.task}`;
-
-          const respIdx = traceSteps.findIndex(s => s.type === 'response');
-          const poolKeysToUse = allKeys.length > 0 ? allKeys : [keyToUse];
-
-          await streamGroqChat({
-            messages: [
-              { role: 'system', content: synthSystemPrompt },
-              ...pastContext,
-              { role: 'user', content: synthUserPrompt }
-            ],
-            model,
-            apiKey: poolKeysToUse,
-            onChunk: (delta, fullText) => {
-              if (respIdx !== -1) traceSteps[respIdx].content = fullText;
-              if (onStepUpdate) onStepUpdate([...traceSteps]);
-              if (onChunk) onChunk(delta, fullText);
-            },
-            onError
-          });
-
-          traceSteps[nodeIdx].status = 'completed';
-          traceSteps[nodeIdx].isStreaming = false;
-          traceSteps[nodeIdx].content = 'Synthesized deliverables.';
+          const idx = getNodeIdx();
+          if (idx !== -1) {
+            traceSteps[idx].status = 'completed';
+            traceSteps[idx].isStreaming = false;
+            nodeOutputs[activeNode.id] = traceSteps[idx].content;
+          }
           if (onStepUpdate) onStepUpdate([...traceSteps]);
         }
       } catch (err) {
-        console.error(`[Graph Executor] Node ${node.id} error:`, err);
-        traceSteps[nodeIdx].status = 'error';
-        traceSteps[nodeIdx].isStreaming = false;
+        console.error(`[Graph Executor] Node ${activeNode.id} error:`, err);
+        const idx = getNodeIdx();
+        if (idx !== -1) {
+          traceSteps[idx].status = 'error';
+          traceSteps[idx].isStreaming = false;
+        }
         if (onStepUpdate) onStepUpdate([...traceSteps]);
       }
-    };
 
-    // Parallel or Sequential execution for this stage
-    const canRunStageInParallel = stageNodes.length > 1 && stageNodes.every(n => n.canParallel);
-
-    if (canRunStageInParallel) {
-      await Promise.all(stageNodes.map(node => executeNode(node)));
-    } else {
-      for (const node of stageNodes) {
-        await executeNode(node);
-      }
+      // Smooth transition pause so current node closes gracefully before next node is created
+      await new Promise(r => setTimeout(r, 450));
     }
   }
 
-  // Ensure final response is populated if not done in synthesis
+  // ── STAGE 3: Final Comprehensive Synthesis & Direct Intelligent Response Delivery ─
   const respNode = traceSteps.find(s => s.type === 'response');
-  if (respNode && !respNode.content) {
-    const synthOutput = Object.values(nodeOutputs).join('\n\n');
-    if (synthOutput && synthOutput.trim()) {
-      respNode.content = synthOutput;
-      if (onStepUpdate) onStepUpdate([...traceSteps]);
-      if (onChunk) onChunk(synthOutput, synthOutput);
-    } else {
-      // Auto-recover response using FAST_MODEL so user never gets empty or generic text
-      const poolKeysToUse = allKeys.length > 0 ? allKeys : [keyToUse];
-      await streamGroqChat({
-        messages: [
-          {
-            role: 'system',
-            content: `You are Devnexes AI. Answer the user's prompt directly, clearly, and concisely in the user's language (English or Roman Urdu).`
-          },
-          ...pastContext,
-          { role: 'user', content: userPrompt }
-        ],
-        model: FAST_MODEL,
-        apiKey: poolKeysToUse,
-        onChunk: (delta, fullText) => {
-          respNode.content = fullText;
-          if (onStepUpdate) onStepUpdate([...traceSteps]);
-          if (onChunk) onChunk(delta, fullText);
+  if (respNode && (!respNode.content || respNode.content.trim().startsWith('[Source #'))) {
+    const rawData = Object.entries(nodeOutputs)
+      .map(([k, v]) => `=== Findings from [${k}] ===\n${v}`)
+      .join('\n\n');
+    const poolKeysToUse = allKeys.length > 0 ? allKeys : [keyToUse];
+
+    const finalSynthPrompt = `${activeSkill.systemPrompt}
+
+You are Devnexes AI — a world-class, highly intelligent, and direct AI engineer & researcher.
+
+CRITICAL RESPONSE DIRECTIVES:
+1. ANSWER DIRECTLY WITH HIGH INTELLECT & NATURAL ESSENCE:
+   - Provide a natural, insightful, well-written answer directly explaining the topic/person/request using the verified findings.
+   - DO NOT output audit tables of search snippets or source evaluations (do NOT create tables of "Source", "Key Insight", "Relevance", "What it might represent", or "Next steps"). Deliver the final synthesized answer directly!
+   - NO generic meta-commentary (do NOT output "Plan Strategy", "Goal:", "Deliverable Summary", "Site Architecture", or internal outlines).
+2. ZERO RAW SOURCE DUMPS:
+   - Never output raw search markers like "[Source #1 | ...]". Weave verified facts seamlessly into your prose.
+3. CODE CANVAS ACKNOWLEDGEMENT:
+   - If a website or code artifact was generated in Canvas, mention in 1-2 clean sentences that the complete standalone project is ready in the Code Canvas.
+4. LANGUAGE FLUENCY:
+   - Match the user's language (Roman Urdu, Urdu, or English) with high natural intelligence and conversational clarity.`;
+
+    await streamGroqChat({
+      messages: [
+        { role: 'system', content: finalSynthPrompt },
+        ...pastContext,
+        {
+          role: 'user',
+          content: rawData
+            ? `User Request: "${userPrompt}"\n\nVerified Stage Findings:\n${rawData}\n\nDeliver the direct comprehensive response now:`
+            : userPrompt
         }
-      });
-    }
+      ],
+      model: model || FAST_MODEL,
+      apiKey: poolKeysToUse,
+      onChunk: (delta, fullText) => {
+        const cleaned = cleanMetaPlanningPreamble(fullText);
+        respNode.content = cleaned;
+        if (onStepUpdate) onStepUpdate([...traceSteps]);
+        if (onChunk) onChunk(delta, cleaned);
+      }
+    });
   }
 
   return { hasCode };
