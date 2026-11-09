@@ -1,19 +1,30 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
-import { 
-  Globe, 
-  Code2, 
-  Brain, 
-  Sparkles, 
-  HelpCircle, 
-  ArrowRight, 
-  X, 
-  ChevronDown, 
-  Check, 
-  ArrowUp 
+import { formatActualModelName } from '../services/groqService';
+import {
+  Globe,
+  Code2,
+  HelpCircle,
+  ArrowRight,
+  X,
+  ChevronDown,
+  Check,
+  ArrowUp,
+  Brain,
+  Zap,
+  Square,
+  Sparkles
 } from 'lucide-react';
-import { AVAILABLE_MODELS } from '../services/groqService';
 
 const SLASH_COMMANDS = [
+  {
+    id: 'image',
+    tag: '/image',
+    aliases: ['/image', '/draw', '/sd'],
+    name: 'Stable Diffusion 1.5',
+    description: 'Dynamic image generation using Stable Diffusion 1.5',
+    icon: Sparkles,
+    action: 'image'
+  },
   {
     id: 'google',
     tag: '/google',
@@ -47,7 +58,7 @@ const SLASH_COMMANDS = [
     aliases: ['/fast'],
     name: 'Fast Chat',
     description: 'Instant direct high-speed conversational response',
-    icon: Sparkles,
+    icon: Zap,
     action: 'fast'
   }
 ];
@@ -55,18 +66,20 @@ const SLASH_COMMANDS = [
 function ChatInput({
   onSendMessage,
   isLoading,
-  agentTraceMode,
-  onToggleAgentTraceMode,
   isDarkMode,
   activeClarification,
+  onDismissClarification,
   selectedModel,
   onSelectModel,
+  availableModels = [],
   isWebSearchActive,
   onToggleWebSearch,
   isCanvasCodeActive,
-  onToggleCanvasCode
+  onToggleCanvasCode,
+  onStopGeneration
 }) {
   const [text, setText] = useState('');
+  const [customClarText, setCustomClarText] = useState('');
   const [attachedImage, setAttachedImage] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
@@ -84,14 +97,14 @@ function ChatInput({
   const isSlashActive = isSlashMenuForced || isTypingSlash;
 
   const filteredSlashCommands = isSlashActive
-    ? (slashQuery 
-        ? SLASH_COMMANDS.filter(cmd => 
-            cmd.tag.toLowerCase().includes(slashQuery) || 
-            cmd.name.toLowerCase().includes(slashQuery) || 
-            cmd.id.includes(slashQuery) ||
-            cmd.aliases.some(a => a.toLowerCase().includes(slashQuery))
-          )
-        : SLASH_COMMANDS)
+    ? (slashQuery
+      ? SLASH_COMMANDS.filter(cmd =>
+        cmd.tag.toLowerCase().includes(slashQuery) ||
+        cmd.name.toLowerCase().includes(slashQuery) ||
+        cmd.id.includes(slashQuery) ||
+        cmd.aliases.some(a => a.toLowerCase().includes(slashQuery))
+      )
+      : SLASH_COMMANDS)
     : [];
 
   useEffect(() => {
@@ -101,7 +114,9 @@ function ChatInput({
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      const targetHeight = Math.min(Math.max(textareaRef.current.scrollHeight, 64), 240);
+      const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+      const minH = isMobile ? 66 : 78;
+      const targetHeight = Math.min(Math.max(textareaRef.current.scrollHeight, minH), 280);
       textareaRef.current.style.height = `${targetHeight}px`;
     }
   }, [text]);
@@ -134,11 +149,8 @@ function ChatInput({
     if (!cmd) return;
     setIsSlashMenuForced(false);
 
-    // Toggle filter badges directly for the user
     if (cmd.action === 'google' && onToggleWebSearch && !isWebSearchActive) onToggleWebSearch();
     if (cmd.action === 'canvas' && onToggleCanvasCode && !isCanvasCodeActive) onToggleCanvasCode();
-    if (cmd.action === 'think' && onToggleAgentTraceMode && !agentTraceMode) onToggleAgentTraceMode();
-    if (cmd.action === 'fast' && onToggleAgentTraceMode && agentTraceMode) onToggleAgentTraceMode();
 
     // Replace the slash token with the explicit command tag in the input
     setText(prev => {
@@ -212,9 +224,17 @@ function ChatInput({
     const finalPrompt = cleanText || 'Please analyze this screenshot / image in full detail.';
     const finalImage = attachedImage ? attachedImage.url : null;
 
-    onSendMessage(finalPrompt, finalImage);
+    onSendMessage(
+      finalPrompt,
+      finalImage,
+      activeClarification ? {
+        isClarificationAnswer: true,
+        question: activeClarification.question
+      } : null
+    );
     setText('');
     setAttachedImage(null);
+    onDismissClarification?.();
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
   };
 
@@ -253,10 +273,10 @@ function ChatInput({
   };
 
   const canSend = (text.trim().length > 0 || !!attachedImage) && !isLoading;
-  const currentModelObj = AVAILABLE_MODELS.find(m => m.id === selectedModel) || AVAILABLE_MODELS[0];
+  const currentModelObj = availableModels.find(m => m.id === selectedModel) || { name: formatActualModelName(selectedModel) || 'Connecting…' };
 
   return (
-    <div className="px-3 sm:px-6 md:px-8 pb-3.5 sm:pb-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-1 sm:pt-1.5 w-full max-w-3xl mx-auto transition-all shrink-0 relative z-30">
+    <div className="px-4 sm:px-5 md:px-6 pb-2 sm:pb-3.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-0.5 sm:pt-1 w-full max-w-[700px] sm:max-w-[750px] md:max-w-[800px] lg:max-w-[820px] mx-auto transition-all shrink-0 relative z-30">
 
       {/* Hidden file input for screenshot / image upload */}
       <input
@@ -270,15 +290,30 @@ function ChatInput({
       {/* Attached Clarification / Quick Options Dock Above Chatbar */}
       {activeClarification && activeClarification.options && activeClarification.options.length > 0 && (
         <div className="mb-2.5 p-3.5 sm:p-4 rounded-xl sm:rounded-2xl bg-white/95 dark:bg-[#0f1424]/95 border border-blue-200/90 dark:border-blue-900/70 shadow-sm animate-step-reveal backdrop-blur-md">
-          <div className="flex items-start space-x-2.5 mb-2.5">
-            <div className="w-5 h-5 sm:w-5.5 sm:h-5.5 rounded-full bg-blue-100 dark:bg-blue-950 text-[#0066FF] dark:text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
-              <HelpCircle size={13} />
+          <div className="flex items-start justify-between gap-2 mb-2.5">
+            <div className="flex items-start space-x-2.5 min-w-0">
+              <div className="w-5 h-5 sm:w-5.5 sm:h-5.5 rounded-full bg-blue-100 dark:bg-blue-950 text-[#0066FF] dark:text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
+                <HelpCircle size={13} />
+              </div>
+              <div>
+                <p className="text-[13px] sm:text-[14px] font-semibold text-slate-900 dark:text-white leading-snug break-words">
+                  {activeClarification.question || 'Please select an option or specify your preference:'}
+                </p>
+                <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Select an option or type below:
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-[13px] sm:text-[14.5px] font-semibold text-slate-900 dark:text-white leading-snug break-words">
-                {activeClarification.question || 'Please select an option or write your custom request:'}
-              </p>
-            </div>
+            {onDismissClarification && (
+              <button
+                type="button"
+                onClick={onDismissClarification}
+                className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+                title="Dismiss"
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-2">
@@ -286,12 +321,18 @@ function ChatInput({
               <button
                 key={i}
                 type="button"
-                onClick={() => onSendMessage(opt)}
-                className={`w-full text-left p-2.5 sm:p-3 rounded-lg sm:rounded-xl text-[12.5px] sm:text-[13.5px] font-medium border transition-all cursor-pointer flex items-center justify-between group active:scale-[0.99] ${
-                  isDarkMode
-                    ? 'bg-[#141a2e] hover:bg-[#1a233d] border-slate-700/80 text-slate-200 hover:text-white hover:border-blue-500'
-                    : 'bg-slate-50 hover:bg-blue-50/80 border-slate-200/90 text-slate-800 hover:text-[#0066FF] hover:border-blue-300 shadow-2xs'
-                }`}
+                onClick={() => {
+                  onSendMessage(opt, null, {
+                    isClarificationAnswer: true,
+                    question: activeClarification.question,
+                    optionIndex: i
+                  });
+                  onDismissClarification?.();
+                }}
+                className={`w-full text-left p-2.5 sm:p-3 rounded-lg sm:rounded-xl text-[12.5px] sm:text-[13.5px] font-medium border transition-all cursor-pointer flex items-center justify-between group active:scale-[0.99] ${isDarkMode
+                  ? 'bg-[#141a2e] hover:bg-[#1a233d] border-slate-700/80 text-slate-200 hover:text-white hover:border-blue-500'
+                  : 'bg-slate-50 hover:bg-blue-50/80 border-slate-200/90 text-slate-800 hover:text-[#0066FF] hover:border-blue-300 shadow-2xs'
+                  }`}
               >
                 <div className="flex items-start space-x-2.5 min-w-0 pr-2">
                   <span className="w-5 h-5 sm:w-5.5 sm:h-5.5 rounded-md text-[11px] sm:text-xs font-mono font-bold flex items-center justify-center bg-blue-100 dark:bg-blue-950 text-[#0066FF] dark:text-blue-400 shrink-0 mt-0.5">
@@ -302,33 +343,90 @@ function ChatInput({
                 <ArrowRight size={13} className="text-slate-400 group-hover:text-[#0066FF] group-hover:translate-x-0.5 transition-all shrink-0" />
               </button>
             ))}
+
+            {/* Custom write-in recommendation input */}
+            <div className={`p-2.5 sm:p-3 rounded-lg sm:rounded-xl border transition-all ${isDarkMode
+              ? 'bg-[#141a2e] border-slate-700/80'
+              : 'bg-slate-50 border-slate-200/90'
+              }`}>
+              <div className="flex items-center space-x-2 mb-1.5">
+                <span className="w-5 h-5 sm:w-5.5 sm:h-5.5 rounded-md text-[11px] sm:text-xs font-mono font-bold flex items-center justify-center bg-blue-100 dark:bg-blue-950 text-[#0066FF] dark:text-blue-400 shrink-0">
+                  {String.fromCharCode(65 + activeClarification.options.length)}
+                </span>
+                <span className="text-xs sm:text-[12.5px] font-medium text-slate-700 dark:text-slate-300 truncate">
+                  Other / Type your own:
+                </span>
+              </div>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!customClarText.trim()) return;
+                  const val = customClarText.trim();
+                  setCustomClarText('');
+                  onSendMessage(val, null, {
+                    isClarificationAnswer: true,
+                    question: activeClarification.question,
+                    isCustomAnswer: true
+                  });
+                  onDismissClarification?.();
+                }}
+                className="flex items-center gap-2 mt-1"
+              >
+                <input
+                  type="text"
+                  value={customClarText}
+                  onChange={(e) => setCustomClarText(e.target.value)}
+                  placeholder="Type your choice here..."
+                  className="flex-1 px-3 py-1.5 rounded-lg text-xs sm:text-[13px] bg-white dark:bg-[#0d101d] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-[#0066FF] dark:focus:border-blue-400 font-sans"
+                />
+                <button
+                  type="submit"
+                  disabled={!customClarText.trim()}
+                  className={`px-3 py-1.5 rounded-lg text-xs sm:text-[12.5px] font-medium flex items-center space-x-1 transition-all cursor-pointer shrink-0 ${customClarText.trim()
+                    ? 'bg-[#0066FF] hover:bg-blue-600 text-white shadow-xs'
+                    : 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                    }`}
+                >
+                  <span>Send</span>
+                  <ArrowRight size={11} />
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       )}
 
       {/* Main input container with unique Devnexes glassmorphic mirror design */}
-      <div
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        className={`group relative flex flex-col rounded-2xl sm:rounded-[24px] border transition-all duration-300 ease-out backdrop-blur-2xl ${
-          isDragging ? 'ring-2 ring-[#0066FF] border-[#0066FF]' : ''
-        } ${
-          isDarkMode
-            ? 'bg-[#0d101d]/90 border-slate-700/60 shadow-[0_8px_32px_rgba(0,0,0,0.55)] hover:border-slate-600/80 focus-within:border-[#0066FF]/70 focus-within:ring-2 focus-within:ring-[#0066FF]/20'
-            : 'bg-white/90 border-slate-200/90 shadow-[0_8px_30px_rgba(0,102,255,0.06)] hover:border-slate-300 focus-within:border-[#0066FF]/60 focus-within:ring-2 focus-within:ring-[#0066FF]/12'
-        }`}
-      >
+      <div className="relative group">
+        {/* Luminous expanding ambient glow that blossoms outward on click / focus */}
+        <div
+          aria-hidden="true"
+          className={`absolute -inset-1 sm:-inset-1.5 rounded-[24px] sm:rounded-[28px] transition-all duration-500 ease-out pointer-events-none blur-xl opacity-0 group-focus-within:opacity-100 ${
+            isDarkMode
+              ? 'bg-gradient-to-r from-[#0066FF]/40 via-indigo-600/35 to-blue-500/40'
+              : 'bg-gradient-to-r from-blue-500/30 via-indigo-400/25 to-blue-400/30'
+          }`}
+        />
+
+        <div
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          className={`relative flex flex-col rounded-[20px] sm:rounded-[24px] border transition-all duration-300 ease-out backdrop-blur-2xl ${isDragging ? 'ring-2 ring-[#0066FF] border-[#0066FF]' : ''
+            } ${isDarkMode
+              ? 'bg-[#0d101d]/90 border-blue-500/40 shadow-[0_4px_24px_rgba(0,0,0,0.55)] hover:border-blue-500/60 focus-within:border-[#0066FF] focus-within:ring-4 focus-within:ring-[#0066FF]/25 focus-within:shadow-[0_16px_50px_rgba(0,102,255,0.42),0_0_35px_rgba(0,102,255,0.25),0_4px_24px_rgba(0,0,0,0.8)]'
+              : 'bg-white/95 border-blue-400/80 shadow-[0_4px_25px_rgba(0,102,255,0.08)] hover:border-blue-400 focus-within:border-[#0066FF] focus-within:ring-4 focus-within:ring-[#0066FF]/20 focus-within:shadow-[0_16px_45px_rgba(0,102,255,0.25),0_0_30px_rgba(0,102,255,0.18)]'
+            }`}
+        >
         {/* Floating Slash Commands Menu - Anchored directly over the input card */}
         {isSlashActive && filteredSlashCommands.length > 0 && (
-          <div 
+          <div
             ref={slashMenuRef}
             onMouseDown={(e) => e.stopPropagation()}
-            className={`absolute bottom-[calc(100%+10px)] left-2 sm:left-4 w-[300px] sm:w-[350px] max-w-[calc(100vw-24px)] rounded-2xl border p-1.5 shadow-2xl z-50 animate-fade-in backdrop-blur-2xl ${
-              isDarkMode 
-                ? 'bg-[#0d101d]/98 border-slate-700/90 text-slate-200 shadow-[0_20px_50px_rgba(0,0,0,0.95)] ring-1 ring-white/5' 
-                : 'bg-white/98 border-slate-200 text-slate-800 shadow-[0_20px_50px_rgba(0,102,255,0.18)] ring-1 ring-black/5'
-            }`}
+            className={`absolute bottom-[calc(100%+8px)] left-1.5 sm:left-4 w-[calc(100vw-28px)] sm:w-[350px] max-w-[340px] rounded-2xl border p-1.5 shadow-2xl z-50 animate-fade-in backdrop-blur-2xl ${isDarkMode
+              ? 'bg-[#0d101d]/98 border-slate-700/90 text-slate-200 shadow-[0_20px_50px_rgba(0,0,0,0.95)] ring-1 ring-white/5'
+              : 'bg-white/98 border-slate-200 text-slate-800 shadow-[0_20px_50px_rgba(0,102,255,0.18)] ring-1 ring-black/5'
+              }`}
           >
             <div className="space-y-1 max-h-64 overflow-y-auto custom-scrollbar">
               {filteredSlashCommands.map((cmd, cIdx) => {
@@ -345,27 +443,24 @@ function ChatInput({
                       handleApplySlashCommand(cmd);
                     }}
                     onMouseEnter={() => setSelectedSlashIndex(cIdx)}
-                    className={`w-full text-left p-2 rounded-xl text-xs transition-all duration-150 flex items-center space-x-2.5 cursor-pointer group ${
-                      isSelected
-                        ? 'bg-blue-50/90 dark:bg-blue-950/80 border border-[#0066FF]/40 text-[#0066FF] dark:text-blue-300 font-medium shadow-xs'
-                        : 'hover:bg-slate-100/80 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-300 border border-transparent'
-                    }`}
+                    className={`w-full text-left p-2 rounded-xl text-xs transition-all duration-150 flex items-center space-x-2.5 cursor-pointer group ${isSelected
+                      ? 'bg-blue-50/90 dark:bg-blue-950/80 border border-[#0066FF]/40 text-[#0066FF] dark:text-blue-300 font-medium shadow-xs'
+                      : 'hover:bg-slate-100/80 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-300 border border-transparent'
+                      }`}
                   >
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
-                      isSelected 
-                        ? 'bg-blue-100 dark:bg-blue-900 text-[#0066FF] dark:text-blue-300' 
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200'
-                    }`}>
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${isSelected
+                      ? 'bg-blue-100 dark:bg-blue-900 text-[#0066FF] dark:text-blue-300'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200'
+                      }`}>
                       <Icon size={15} />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-1.5">
                         <span className="font-semibold text-[13px] leading-tight truncate">{cmd.name}</span>
-                        <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded-md shrink-0 ${
-                          isSelected 
-                            ? 'bg-blue-200/60 dark:bg-blue-900/60 text-[#0066FF] dark:text-blue-300 font-bold' 
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
-                        }`}>
+                        <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded-md shrink-0 ${isSelected
+                          ? 'bg-blue-200/60 dark:bg-blue-900/60 text-[#0066FF] dark:text-blue-300 font-bold'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                          }`}>
                           {cmd.tag}
                         </span>
                       </div>
@@ -414,7 +509,7 @@ function ChatInput({
           </div>
         )}
 
-        {/* Textarea — Perfectly proportioned vertically for comfortable typing */}
+        {/* Textarea — Comfortable, generous vertical height and balanced proportion */}
         <textarea
           ref={textareaRef}
           value={text}
@@ -423,24 +518,23 @@ function ChatInput({
           onPaste={handlePaste}
           placeholder="Message Devnexes AI..."
           rows={2}
-          className={`w-full px-4 sm:px-6 pt-3.5 sm:pt-4 pb-2 bg-transparent resize-none border-0 focus:outline-none text-[15px] sm:text-[16px] leading-relaxed custom-scrollbar min-h-[64px] sm:min-h-[72px] max-h-56 font-sans ${
-            isDarkMode
-              ? 'text-slate-100 placeholder:text-slate-500'
-              : 'text-slate-900 placeholder:text-slate-400'
-          }`}
+          className={`w-full px-4 sm:px-5 pt-3.5 sm:pt-4 pb-2 bg-transparent resize-none border-0 focus:outline-none text-[15.5px] sm:text-[16.5px] leading-relaxed custom-scrollbar min-h-[64px] sm:min-h-[78px] max-h-40 sm:max-h-52 font-sans ${isDarkMode
+            ? 'text-slate-100 placeholder:text-slate-500'
+            : 'text-slate-900 placeholder:text-slate-400'
+            }`}
         />
 
         {/* Active Filter Badges Bar (Inside Chatbar) */}
         {(isWebSearchActive || isCanvasCodeActive) && (
-          <div className="flex flex-wrap items-center gap-1.5 px-3.5 sm:px-4 pb-2 select-none animate-fade-in">
+          <div className="flex flex-wrap items-center gap-1.5 px-3.5 sm:px-4.5 pb-1 select-none animate-fade-in">
             {isWebSearchActive && (
-              <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-50 dark:bg-blue-950/70 border border-blue-300 dark:border-blue-800 text-[#0066FF] dark:text-blue-300">
-                <Globe size={12} />
+              <span className="inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-lg text-[10.5px] sm:text-[11px] font-medium bg-blue-50 dark:bg-blue-950/70 border border-blue-300 dark:border-blue-800 text-[#0066FF] dark:text-blue-300">
+                <Globe size={11} className="sm:w-3 sm:h-3" />
                 <span>Google Search</span>
                 {onToggleWebSearch && (
-                  <button 
-                    type="button" 
-                    onClick={onToggleWebSearch} 
+                  <button
+                    type="button"
+                    onClick={onToggleWebSearch}
                     className="hover:bg-blue-200/70 dark:hover:bg-blue-900 rounded p-0.5 ml-0.5 cursor-pointer"
                     title="Remove Google Search filter"
                   >
@@ -450,13 +544,13 @@ function ChatInput({
               </span>
             )}
             {isCanvasCodeActive && (
-              <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-300 dark:border-indigo-800 text-indigo-600 dark:text-indigo-300">
-                <Code2 size={12} />
+              <span className="inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-lg text-[10.5px] sm:text-[11px] font-medium bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-300 dark:border-indigo-800 text-indigo-600 dark:text-indigo-300">
+                <Code2 size={11} className="sm:w-3 sm:h-3" />
                 <span>Canvas Code</span>
                 {onToggleCanvasCode && (
-                  <button 
-                    type="button" 
-                    onClick={onToggleCanvasCode} 
+                  <button
+                    type="button"
+                    onClick={onToggleCanvasCode}
                     className="hover:bg-indigo-200/70 dark:hover:bg-indigo-900 rounded p-0.5 ml-0.5 cursor-pointer"
                     title="Remove Canvas Code add-in"
                   >
@@ -469,47 +563,22 @@ function ChatInput({
         )}
 
         {/* Bottom toolbar */}
-        <div className="flex items-center justify-between px-3 sm:px-4 pb-2.5 pt-1">
+        <div className="flex items-center justify-between px-3.5 sm:px-4.5 pb-2.5 sm:pb-3 pt-1">
 
-          {/* Left: Plus (+) Attach Button & Mode Toggle */}
-          <div className="flex items-center space-x-2">
-            {/* Transparent Plus (+) Button */}
+          {/* Left: Plus (+) Attach Button */}
+          <div className="flex items-center space-x-1.5 sm:space-x-2">
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className={`w-7.5 h-7.5 flex items-center justify-center transition-colors bg-transparent border-0 cursor-pointer shrink-0 select-none text-2xl font-light leading-none ${
-                attachedImage
-                  ? 'text-[#0066FF] dark:text-blue-400 font-bold'
-                  : isDarkMode
-                    ? 'text-slate-400 hover:text-white'
-                    : 'text-slate-500 hover:text-slate-900'
-              }`}
+              className={`w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-full flex items-center justify-center transition-colors bg-transparent border-0 cursor-pointer shrink-0 select-none text-xl font-normal leading-none hover:bg-slate-100 dark:hover:bg-slate-800/80 ${attachedImage
+                ? 'text-[#0066FF] dark:text-blue-400 font-bold'
+                : isDarkMode
+                  ? 'text-slate-400 hover:text-white'
+                  : 'text-slate-500 hover:text-slate-900'
+                }`}
               title="Attach image or screenshot"
             >
               <span className="mb-0.5">+</span>
-            </button>
-
-            {/* Mode Toggle Button: Refined modern button with clean micro-icon */}
-            <button
-              type="button"
-              onClick={onToggleAgentTraceMode}
-              className={`h-7.5 sm:h-8 px-3 rounded-xl text-xs sm:text-[13px] font-medium transition-all duration-200 border cursor-pointer select-none flex items-center space-x-1.5 ${
-                agentTraceMode
-                  ? isDarkMode
-                    ? 'bg-blue-950/60 border-blue-500/80 text-blue-300 font-semibold shadow-xs'
-                    : 'bg-blue-50 border-blue-300 text-[#0066FF] font-semibold shadow-2xs'
-                  : isDarkMode
-                    ? 'border-slate-800/90 bg-[#121626] text-slate-300 hover:text-white hover:border-slate-700 hover:bg-[#161c30]'
-                    : 'border-slate-200/90 bg-slate-100/90 text-slate-700 hover:text-slate-900 hover:border-slate-300 hover:bg-slate-200/70'
-              }`}
-              title="Click to toggle between Fast Chat and Deep Think"
-            >
-              {agentTraceMode ? (
-                <Brain size={13.5} className="text-[#0066FF] dark:text-blue-400 shrink-0" />
-              ) : (
-                <Sparkles size={13.5} className="text-[#0066FF] dark:text-blue-400 shrink-0" />
-              )}
-              <span>{agentTraceMode ? 'Deep Think' : 'Fast Chat'}</span>
             </button>
           </div>
 
@@ -521,25 +590,23 @@ function ChatInput({
                 <button
                   type="button"
                   onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-                  className={`h-7.5 sm:h-8 px-2.5 sm:px-3 rounded-lg sm:rounded-xl text-xs sm:text-[13px] font-medium transition-all duration-200 border cursor-pointer select-none flex items-center space-x-1.5 ${
-                    isDarkMode
-                      ? 'border-slate-800/90 bg-[#121626] text-slate-300 hover:text-white hover:border-slate-700 hover:bg-[#161c30]'
-                      : 'border-slate-200/90 bg-slate-100/90 text-slate-700 hover:text-slate-900 hover:border-slate-300 hover:bg-slate-200/70'
-                  }`}
+                  className={`h-8 px-3 rounded-full text-xs sm:text-xs font-medium transition-all duration-200 border cursor-pointer select-none flex items-center space-x-1.5 ${isDarkMode
+                    ? 'border-slate-800/90 bg-[#121626] text-slate-300 hover:text-white hover:border-slate-700 hover:bg-[#161c30]'
+                    : 'border-slate-200/90 bg-slate-100/90 text-slate-700 hover:text-slate-900 hover:border-slate-300 hover:bg-slate-200/70'
+                    }`}
                   title="Switch Model"
                 >
-                  <span className="truncate max-w-[120px] sm:max-w-none">{currentModelObj.name}</span>
-                  <ChevronDown size={12} className={`opacity-50 shrink-0 transition-transform duration-200 ${isModelDropdownOpen ? 'rotate-180' : ''}`} />
+                  <span className="truncate max-w-[105px] xs:max-w-[140px] sm:max-w-none">{currentModelObj.name}</span>
+                  <ChevronDown size={11} className={`opacity-60 shrink-0 transition-transform duration-200 ${isModelDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
 
                 {/* Dropdown menu - opens upwards so it is always 100% visible and never clipped */}
                 {isModelDropdownOpen && (
-                  <div className={`absolute bottom-full right-0 mb-2 w-56 rounded-xl sm:rounded-2xl border p-1.5 shadow-2xl z-50 animate-fade-in backdrop-blur-2xl ${
-                    isDarkMode
-                      ? 'bg-[#0d101d]/98 border-slate-700/80 text-slate-200 shadow-[0_12px_40px_rgba(0,0,0,0.8)]'
-                      : 'bg-white/98 border-slate-200/90 text-slate-800 shadow-[0_12px_40px_rgba(0,0,0,0.15)]'
-                  }`}>
-                    {AVAILABLE_MODELS.map(m => (
+                  <div className={`absolute bottom-full right-0 mb-2 w-56 rounded-xl sm:rounded-2xl border p-1.5 shadow-2xl z-50 animate-fade-in backdrop-blur-2xl ${isDarkMode
+                    ? 'bg-[#0d101d]/98 border-slate-700/80 text-slate-200 shadow-[0_12px_40px_rgba(0,0,0,0.8)]'
+                    : 'bg-white/98 border-slate-200/90 text-slate-800 shadow-[0_12px_40px_rgba(0,0,0,0.15)]'
+                    }`}>
+                    {availableModels.map(m => (
                       <button
                         key={m.id}
                         type="button"
@@ -547,16 +614,16 @@ function ChatInput({
                           onSelectModel(m.id);
                           setIsModelDropdownOpen(false);
                         }}
-                        className={`w-full text-left px-3 py-2.5 rounded-lg sm:rounded-xl text-xs sm:text-[13px] font-medium transition-colors flex items-center justify-between cursor-pointer ${
-                          selectedModel === m.id
-                            ? 'bg-blue-50 dark:bg-blue-950/70 text-[#0066FF] dark:text-blue-400 font-semibold'
-                            : 'hover:bg-slate-100 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-                        }`}
+                        className={`w-full text-left px-3 py-2 rounded-lg sm:rounded-xl text-xs sm:text-[13px] font-medium transition-colors flex items-center justify-between cursor-pointer ${selectedModel === m.id
+                          ? 'bg-blue-50 dark:bg-blue-950/70 text-[#0066FF] dark:text-blue-400 font-semibold'
+                          : 'hover:bg-slate-100 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                          }`}
                       >
                         <span className="truncate">{m.name}</span>
-                        {selectedModel === m.id && (
-                          <Check size={14} className="text-[#0066FF] dark:text-blue-400 shrink-0 ml-1" />
-                        )}
+                        <span className="ml-auto flex items-center gap-1.5 shrink-0">
+                          {m.vision && <span className="text-[9px] font-mono uppercase text-emerald-600 dark:text-emerald-400">Vision</span>}
+                          {selectedModel === m.id && <Check size={14} className="text-[#0066FF] dark:text-blue-400" />}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -566,22 +633,24 @@ function ChatInput({
 
             {/* Send Button */}
             <button
-              onClick={handleSubmit}
-              disabled={!canSend}
-              className={`w-7.5 h-7.5 sm:w-8.5 sm:h-8.5 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer shrink-0 ${
-                canSend
-                  ? 'bg-gradient-to-tr from-[#0052cc] to-[#0066FF] hover:from-[#0066FF] hover:to-[#2b8aff] text-white shadow-md shadow-blue-500/25 hover:scale-105 active:scale-95'
-                  : isDarkMode
-                    ? 'bg-slate-800/60 text-slate-600 cursor-not-allowed'
-                    : 'bg-slate-100 text-slate-300 cursor-not-allowed'
-              }`}
-              title="Send message"
+              onClick={isLoading ? onStopGeneration : handleSubmit}
+              disabled={isLoading ? !onStopGeneration : !canSend}
+              className={`w-8 h-8 sm:w-8.5 sm:h-8.5 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer shrink-0 ${(canSend || isLoading)
+                ? isLoading
+                  ? 'bg-rose-500 hover:bg-rose-600 text-white shadow-md shadow-rose-500/25 hover:scale-105 active:scale-95'
+                  : 'bg-gradient-to-tr from-[#0052cc] to-[#0066FF] hover:from-[#0066FF] hover:to-[#2b8aff] text-white shadow-md shadow-blue-500/25 hover:scale-105 active:scale-95'
+                : isDarkMode
+                  ? 'bg-slate-800/60 text-slate-600 cursor-not-allowed'
+                  : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                }`}
+              title={isLoading ? "Stop generation" : "Send message"}
             >
-              <ArrowUp size={15} strokeWidth={canSend ? 2.5 : 2} />
+              {isLoading ? <Square size={10} fill="currentColor" /> : <ArrowUp size={15} className="sm:w-4 sm:h-4" strokeWidth={canSend ? 2.5 : 2} />}
             </button>
           </div>
 
         </div>
+      </div>
       </div>
     </div>
   );
