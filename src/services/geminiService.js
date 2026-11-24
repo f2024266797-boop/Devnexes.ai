@@ -7,7 +7,7 @@
 import { isRealApiKey } from '../utils/dynamicNLP.js';
 import { retrieveRelevantMemories, formatMemoriesForPrompt } from './memoryRagService.js';
 
-export const DEFAULT_GEMINI_MODEL = import.meta.env?.VITE_GEMINI_MODEL || import.meta.env?.GEMINI_MODEL || 'gemini-3-flash-preview';
+export const DEFAULT_GEMINI_MODEL = import.meta.env?.VITE_GEMINI_MODEL || import.meta.env?.GEMINI_MODEL || 'gemini-2.5-flash';
 
 const COOLDOWN_DURATION_MS = 60 * 1000; // 60 seconds cooldown for rate-limited keys
 const keyCooldowns = { 0: 0, 1: 0, 2: 0 };
@@ -240,8 +240,8 @@ async function executeSingleGeminiStream({
   onChunk,
   signal
 }) {
-  // Use active flagship Gemini model (gemini-3-flash-preview or gemini-3.8-flash)
-  const activeModel = (model === 'gemini-2.5-flash' || !model) ? 'gemini-3-flash-preview' : model;
+  // Use active flagship Gemini model (gemini-2.5-flash with automatic fallback)
+  const activeModel = model || DEFAULT_GEMINI_MODEL || 'gemini-2.5-flash';
   const isBearerToken = key.startsWith('ya29.');
   const url = isBearerToken
     ? `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(activeModel)}:streamGenerateContent?alt=sse`

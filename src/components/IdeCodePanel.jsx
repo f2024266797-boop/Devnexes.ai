@@ -92,6 +92,18 @@ export default function IdeCodePanel({
     });
   }, [cleanCode, title, language]);
 
+  // Auto-switch to live interactive preview when HTML website code is generated
+  const prevCodeRef = useRef('');
+  useEffect(() => {
+    if (cleanCode && cleanCode !== prevCodeRef.current) {
+      prevCodeRef.current = cleanCode;
+      const isHtml = (language || '').toLowerCase() === 'html' || cleanCode.includes('<!DOCTYPE') || cleanCode.includes('<html');
+      if (isHtml) {
+        setActiveTab('preview');
+      }
+    }
+  }, [cleanCode, language]);
+
   // Rollback to specific version
   const handleRollback = (ver) => {
     if (!ver || !ver.code) return;

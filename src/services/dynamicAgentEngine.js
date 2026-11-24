@@ -23,7 +23,7 @@ import {
   DEFAULT_GROQ_MODEL,
   getAvailableGroqKey
 } from './groqService.js';
-import { getAvailableGeminiKey } from './geminiService.js';
+import { getAvailableGeminiKey, markGeminiKeyCooldown } from './geminiService.js';
 import { getSearchKeys } from './searchService.js';
 import { getStabilityApiKey, generateStableDiffusionImage } from './imageService.js';
 import { ingestWorkspaceFiles, createWorkspaceReader } from './fileReaderService.js';
@@ -41,6 +41,7 @@ import {
   detectUrduScript,
   isUrduOrHindi,
   detectProgrammingLanguageDynamically,
+  isWebsiteOrWebUiRequest,
   isRealApiKey
 } from '../utils/dynamicNLP.js';
 
@@ -144,7 +145,7 @@ export function clearConversationWorkspace(convId) {
   conversationWorkspaceCache.delete(convId);
 }
 
-/* ---------- Prompts (1:1 from HTML) ---------- */
+/* ---------- Prompts (Enhanced with Website & Code Engine Architecture) ---------- */
 const INTAKE_SYS = `You are a smart, friendly assistant inside a chat app. Always answer in the user's own language and style (Roman Urdu stays Roman Urdu, English stays English, and so on).
 
 Your reply MUST begin with one of these first lines, alone on the line:
@@ -159,7 +160,8 @@ MODE: TASK - then output ONLY this JSON and nothing else:
 {"asks":[{"id":"a1","text":"short restatement of one thing the user wants","type":"general|task"}],"weight":"light|heavy","language":"the user's language and style"}
 Choose it when the work needs several dependent parts, a long document or program, analysis of provided material or an image, live web information, or whenever one reply would be weak. Split the message into separate asks. Mark an ask "general" if it can simply be answered in the final reply with no extra work. weight "light" = quick (one or two short moves); "heavy" = long, or the user will have to wait.
 
-MODE: ASK - then output ONLY: {"questions":[{"question":"...","options":["...","..."]}]} with 1-3 short questions and 2-4 short options each. Use it when the request is open-ended or big (an app, website, plan, project, roadmap, long code) and key choices such as goal, platform, language, scope or style are missing; a good teammate asks first. Do not ask when the request is simple or fully specified.
+MODE: ASK - then output ONLY: {"questions":[{"question":"...","options":["...","..."]}]} with 1-3 short questions and 2-4 short options each. Use it when the request is open-ended or big (an app, plan, project, roadmap) and key choices are missing; a good teammate asks first. Do not ask when the request is simple or fully specified.
+IMPORTANT EXCEPTION: NEVER use MODE: ASK for website, landing page, portfolio, or UI creation requests. The user wants immediate code generation in HTML/CSS/JS!
 
 MODE: IMAGE - then output ONLY this JSON: {"op":"generate|variation|replace|recolor|remove_bg|upscale","prompt":"...","negative":"...","aspect":"1:1","search":"","strength":0.5,"keep_seed":false,"reply":"..."}
 Choose it when the user wants a picture created, or an earlier generated image changed. If the message says "[image generation available: no]", choose GENERAL instead and tell the user to add the Stability API key in Settings.
@@ -169,6 +171,9 @@ Changes to the last image (only when "[last image exists]"): "replace" = swap on
 You cannot run commands or programs. If asked for a command, write it for the user; never pretend you ran it.
 
 OUTPUT ACCURACY & USER-FRIENDLY QUALITY RULES:
+- WEBSITE & WEB UI CREATION MANDATE: When the user asks to build, create, or design ANY website, web page, landing page, portfolio, ecommerce store, web app, or frontend UI (e.g. "website bana do", "make a gym website", "landing page design karo"):
+  * NEVER choose MODE: ASK. Do not delay the user with questions.
+  * ALWAYS choose MODE: TASK with a single ask of type "task" to craft the complete interactive website.
 - ZERO EXCESSIVE PLACEHOLDERS: Never output documents or responses littered with annoying bracket placeholders like [Supervisor/Manager ka Naam], [number of days], [start date], [end date], [Aapka Naam], [Contact Number], [Email Address]. When drafting letters, emails, code or applications, provide realistic, natural details directly so the text is immediately copy-paste ready, clean, and complete.
 - NO PATRONIZING BOILERPLATE: Never append chatty boilerplate instructions like "Just replace the placeholders in brackets with your actual information and you're good to go! If you need a version in Urdu script or any other tweaks, let me know." Deliver direct, accurate, high-taste responses without extra fluff.
 - ATTACHED WORKSPACE & FILE PERSISTENCE: When '[attached files available: N]' or '[Attached File: ...]' or '[Attached Files Content]' is provided, the user already uploaded these files in this chat. They persist for the entire conversation. NEVER tell the user to upload or re-attach the file again, and NEVER ask if you should paste file content. Answer their questions directly, accurately, and authoritatively from the provided file content.`;
@@ -191,6 +196,12 @@ PRINCIPLES
 8. Anything that needs current or live information must use search. In the final answer keep the [n] source markers next to facts taken from search.
 9. Never rewrite an artifact. In "final" put {{id}} exactly where an artifact listed in the notebook must appear; it is inserted as-is. Only use ids that exist.
 10. Follow all active rules in the notebook's active_knowledge_and_rules strictly, and avoid repeating any past mistakes or anti-patterns mentioned there.
+11. WEBSITE & WEB UI CODING PROTOCOL:
+    - Whenever the user asks to build or design a website, web page, landing page, portfolio, e-commerce store, or frontend UI:
+      * The action MUST be "code".
+      * The "spec" MUST direct the coding engine to generate a complete, self-contained, single-file interactive HTML document ("index.html") with Tailwind CSS CDN, Lucide Icons CDN, Google Fonts, and embedded Vanilla JS.
+      * Include all semantic sections: Sticky Navbar with working mobile hamburger drawer, Hero with badge & dual CTAs, detailed Features Grid with icons, Interactive Component (category filter / pricing toggle / live search), Testimonials, FAQ Accordion with JS toggle, CTA banner, and Multi-column Footer.
+      * ZERO PLACEHOLDERS: Prohibit "<!-- TODO -->", "// rest of code", and dummy empty blocks. Ensure rich, realistic copy and full styling.
 
 OUTPUT: one JSON object with the keys:
 "serves": id of the ask this move serves,
@@ -208,7 +219,97 @@ and, by action:
  ask         -> "questions": [{"question","options"}] (1-3 questions, 2-4 short options each)
  finish      -> "final": the complete answer for the user, covering all asks in the order the user gave them. Quality rule: never spam bracket placeholders like [Name], [Number], [Date]; use realistic details directly. No patronizing filler like 'just replace the placeholders'. "followups": 2-3 things the user may want next (under 7 words each, in the user's language)`;
 
-const CODE_SYS = `You are an expert programmer. Write complete, working, clean code for the spec. Reply with the code in fenced blocks (one block per file, with the file name on the line just above it) and almost no prose. Do not claim to have run or tested anything. The very last line must be: NOTE: <one short line saying what you built and any assumptions>`;
+const WEBSITE_ENGINE_PROMPT = `You are Devnexes AI's Principal Frontend Architect and Elite UI/UX Designer.
+You specialize in building world-class, production-grade, highly polished, interactive websites.
+
+MANDATE: ALWAYS BUILD A COMPLETE, SELF-CONTAINED, SINGLE-FILE INTERACTIVE HTML DOCUMENT (HTML + Tailwind CSS CDN + Lucide Icons CDN + Vanilla JS).
+The output must run directly inside a browser iframe or web preview with zero build step, zero dependencies, and zero setup.
+
+CRITICAL ARCHITECTURAL STANDARDS:
+1. STANDALONE HTML STRUCTURE:
+   - Start with <!DOCTYPE html><html lang="en" class="scroll-smooth">.
+   - Include Tailwind CSS CDN: <script src="https://cdn.tailwindcss.com"></script>
+   - Include Lucide Icons CDN: <script src="https://unpkg.com/lucide@latest"></script>
+   - Include Google Fonts (Plus Jakarta Sans or Inter):
+     <link rel="preconnect" href="https://fonts.googleapis.com">
+     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+   - Tailwind Customization in <script>:
+     <script>
+       tailwind.config = {
+         darkMode: 'class',
+         theme: {
+           extend: {
+             fontFamily: { sans: ['Plus Jakarta Sans', 'sans-serif'] },
+             colors: {
+               brand: { 50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8' }
+             }
+           }
+         }
+       }
+     </script>
+   - Custom styling in <style>:
+     Smooth scrollbar, glassmorphism utilities (.glass { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }), custom hover glow, and subtle animations.
+
+2. COMPREHENSIVE PRODUCTION-GRADE SECTIONS (MUST BUILD ALL):
+   Every website MUST be richly populated with realistic, compelling copy tailored specifically to the user's domain (e.g. gym, crypto, coffee shop, agency, dental, SaaS, portfolio):
+   a. STICKY NAVBAR:
+      - Brand Logo with Lucide icon + bold typography.
+      - Desktop navigation links with active state indicator and smooth anchor scrolling.
+      - Call to Action button (e.g., "Get Started", "Book Appointment", "Join Now").
+      - WORKING MOBILE HAMBURGER BUTTON & DRAWER: A hamburger button (<button id="mobileMenuBtn">) that smoothly toggles a slide-down or slide-in mobile navigation menu (<div id="mobileMenu" class="hidden ...">) in JavaScript.
+   b. HERO SECTION:
+      - Status/announcement pill badge with an icon (e.g., "⚡ Next-Gen 2.0 Released").
+      - Eye-catching headline with vibrant gradient text highlights.
+      - Clear, compelling subheadline explaining value proposition and benefit.
+      - Dual Action CTAs (Primary prominent button + Secondary outline button with icon).
+      - Social proof banner: 5-star rating (★★★★★), "Trusted by 10,000+ active users", or client company logos.
+      - Visual Mockup / Interactive Hero Card: A sleek card preview or dashboard illustration built in pure HTML/CSS.
+   c. FEATURES & CAPABILITIES GRID:
+      - 4 to 6 comprehensive feature cards with unique Lucide icons in colored rounded containers.
+      - Deep descriptive copy (not just 1 sentence), bullet points, and "Learn more →" micro-links.
+      - Smooth hover transforms (hover:-translate-y-1.5 hover:shadow-xl transition-all duration-300).
+   d. LIVE INTERACTIVE ELEMENT (MANDATORY FUNCTIONING JAVASCRIPT):
+      - Build a real, engaging interactive component tailored to the website's topic:
+        * E-commerce / Menu / Portfolio: Interactive Category Filter Tabs (All, Popular, New, Featured) that filter cards in real-time in JS!
+        * SaaS / Gym / Services: Interactive Billing Toggle (Monthly / Annual with 20% Discount Badge) that dynamically changes pricing numbers with animation in JS!
+        * Directory / Real Estate: Live search input that filters cards as the user types!
+        * Financial / Booking: Interactive cost estimator or calculator form with instant calculation!
+   e. SOCIAL PROOF & TESTIMONIALS:
+      - 3+ realistic testimonial cards with verified client avatars (Dicebear or Unsplash URLs), client names, roles, company, 5-star ratings, and authentic quotes.
+   f. INTERACTIVE FAQ ACCORDION:
+      - 4 to 5 detailed, realistic Q&As addressing common customer questions.
+      - Smooth accordion open/close logic in JS with rotating chevron icons.
+   g. HIGH-IMPACT CALL TO ACTION (CTA) SECTION:
+      - Contrasting gradient or dark background section with email signup input or booking trigger with instant feedback.
+   h. COMPLETE MULTI-COLUMN FOOTER:
+      - Brand summary, Product links, Company links, Resources links, Legal notices, Social media icons, and dynamic copyright year.
+
+3. EMBEDDED JAVASCRIPT LOGIC (INSIDE <script>):
+   - Mobile hamburger menu toggle with overlay animation.
+   - FAQ accordion expand/collapse handler.
+   - Interactive component handlers (tabs, category filters, pricing toggle, search, or calculator).
+   - Form submission handler: event.preventDefault() with a stylish, temporary toast notification or badge confirming success (no page reloads!).
+   - MUST CALL lucide.createIcons(); on DOMContentLoaded AND after any DOM manipulations so all icons render crisp and sharp.
+
+4. ABSOLUTE ZERO-PLACEHOLDER MANDATE:
+   - Strictly NEVER write "// TODO: add more items", "<!-- add more cards here -->", "/* rest of code */", "[Your Name]", or "Lorem ipsum dolor sit amet".
+   - Every single headline, card, paragraph, pricing tier, and review must contain full, realistic, natural, engaging content specifically crafted for the requested website topic.
+
+5. OUTPUT FORMAT:
+   - Output ONLY the single complete, self-contained HTML document inside one fenced block:
+   \`\`\`html
+   <!DOCTYPE html>
+   ...
+   \`\`\`
+   - The very last line must be: NOTE: <one short line describing the built website and features>`;
+
+const CODE_SYS = `You are an expert programmer. Write complete, working, production-grade, clean code for the spec.
+Rules:
+- Never use placeholder comments like "// TODO", "// rest of code here", "/* add implementation */", or bracket placeholders.
+- Always provide the full, complete implementation ready to run without missing imports or incomplete logic.
+- Reply with the code in fenced blocks (one block per file, with the file name on the line just above it) and almost no prose. Do not claim to have run or tested anything.
+The very last line must be: NOTE: <one short line saying what you built and any assumptions>`;
 
 /* ---------- Model Call Wrappers with Automatic Fallbacks ---------- */
 async function callBrainJson({ messages, maxTokens = 7000, temperature = 0.3, effort = EFFORT.step, signal }) {
@@ -258,69 +359,100 @@ async function callHelperJson({ messages, maxTokens = 600, temperature = 0.2, si
 }
 
 /* ---------- Network: Gemini & Groq Code Engine ---------- */
-async function geminiGenerateCode(spec, signal, memoryContext = '') {
-  const geminiKey = getAvailableGeminiKey()?.key;
-  if (!geminiKey) return '';
-
+async function geminiGenerateCode(spec, signal, memoryContext = '', isWeb = false) {
+  const baseSys = isWeb ? WEBSITE_ENGINE_PROMPT : CODE_SYS;
   const systemText = memoryContext
-    ? `${CODE_SYS}\n\n${memoryContext}`
-    : CODE_SYS;
+    ? `${baseSys}\n\n${memoryContext}`
+    : baseSys;
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(AGENT_MODELS.gemini)}:generateContent`;
+  const candidateModels = [
+    AGENT_MODELS.gemini || 'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash'
+  ];
+
   for (let attempt = 0; attempt < 3; attempt++) {
+    const activeModel = candidateModels[attempt] || candidateModels[0];
+    const keyObj = getAvailableGeminiKey();
+    const currentKey = keyObj?.key;
+    const currentIndex = keyObj?.index ?? 0;
+
+    if (!currentKey) {
+      console.warn('[Gemini Code Engine] No available Gemini API key configured or all in cooldown.');
+      return '';
+    }
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(activeModel)}:generateContent`;
     try {
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': currentKey },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: systemText }] },
           contents: [{ role: 'user', parts: [{ text: spec }] }],
-          generationConfig: { temperature: 0.3 }
+          generationConfig: {
+            temperature: 0.25,
+            maxOutputTokens: 8192
+          }
         }),
         signal
       });
+
       if (res.status === 429 || res.status === 503) {
-        await new Promise(r => setTimeout(r, 3000 * (attempt + 1)));
+        console.warn(`[Gemini Code Engine] Key #${currentIndex + 1} rate limited on ${activeModel}. Rotating key...`);
+        markGeminiKeyCooldown(currentIndex);
+        await new Promise(r => setTimeout(r, 1200 * (attempt + 1)));
         continue;
       }
-      if (!res.ok) throw new Error(`Gemini status ${res.status}`);
+
+      if (!res.ok) {
+        console.warn(`[Gemini Code Engine] Model ${activeModel} status ${res.status}. Trying next candidate model...`);
+        continue;
+      }
+
       const j = await res.json();
       const parts = (j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || [];
-      return parts.map(p => p.text || '').join('');
+      const codeOutput = parts.map(p => p.text || '').join('');
+      if (codeOutput && codeOutput.trim()) {
+        return codeOutput;
+      }
     } catch (e) {
       if (e.name === 'AbortError') throw e;
+      console.warn(`[Gemini Code Engine] Attempt ${attempt + 1} on ${activeModel} error:`, e.message);
       if (attempt === 2) return '';
     }
   }
   return '';
 }
 
-async function writeCode(spec, signal, memoryContext = '') {
+async function writeCode(spec, signal, memoryContext = '', isWeb = false) {
   let text = '';
   try {
-    text = await geminiGenerateCode(spec, signal, memoryContext);
+    text = await geminiGenerateCode(spec, signal, memoryContext, isWeb);
   } catch (e) {
     if (e.name === 'AbortError') throw e;
     text = '';
   }
 
+  // Seamless fallback to Groq flagship models if Gemini keys are temporarily offline
   if (!text) {
+    const baseSys = isWeb ? WEBSITE_ENGINE_PROMPT : CODE_SYS;
     const groqSystemPrompt = memoryContext
-      ? `${CODE_SYS}\n\n${memoryContext}`
-      : CODE_SYS;
+      ? `${baseSys}\n\n${memoryContext}`
+      : baseSys;
     text = await callGroqChatJson({
       messages: [
         { role: 'system', content: groqSystemPrompt },
         { role: 'user', content: spec }
       ],
       model: AGENT_MODELS.main,
-      temperature: 0.3,
+      temperature: 0.25,
       responseFormatJson: false,
       signal
     });
   }
 
-  let note = 'code written';
+  let note = isWeb ? 'Complete interactive HTML/CSS/JS website built' : 'code written';
   const m = (text || '').match(/\n\s*NOTE:\s*([^\n]+)\s*$/i);
   if (m) {
     note = m[1].trim();
@@ -521,17 +653,18 @@ export const DYNAMIC_AGENT_PHRASES = {
   },
   code: {
     urdu: [
+      'Gemini ke zariye responsive HTML/CSS/JS website code craft ho raha hai',
+      'Production-grade website ka interactive code tayyar ho raha hai',
+      'Tailwind CSS aur Lucide icons ke sath modern website design ki ja rahi hai',
       'Clean solution code craft ho raha hai',
-      'Implementation logic tayyar ki ja rahi hai',
-      'Optimized code develop kiya ja raha hai',
-      'Code solution build kiya ja raha hai',
-      'High-quality code likha ja raha hai'
+      'Interactive components aur styling develop ho rahi hain',
+      'High-quality production code likha ja raha hai'
     ],
     en: [
-      'Crafting clean implementation',
-      'Building solution code',
-      'Developing optimized code',
-      'Writing implementation logic',
+      'Crafting responsive HTML/CSS/JS website with Gemini',
+      'Building production-grade interactive website',
+      'Designing modern UI with Tailwind CSS & Lucide icons',
+      'Developing optimized interactive components',
       'Engineering high-quality code'
     ]
   },
@@ -996,6 +1129,8 @@ async function startFlow({
     }
   }
 
+  const isWebsite = isWebsiteOrWebUiRequest(text);
+
   // Construct Intake Messages
   const msgs = [{ role: 'system', content: INTAKE_SYS }];
   if (memoryPromptSection) msgs.push({ role: 'system', content: memoryPromptSection });
@@ -1008,7 +1143,8 @@ async function startFlow({
     `[web search available: ${tavilyKey ? 'yes' : 'no'}]`,
     `[image generation available: ${stabKey ? 'yes' : 'no'}]`,
     workspace ? `[attached files available: ${workspace.files?.length || 0}]` : null,
-    noAsk ? '[Do not use MODE: ASK; assume sensibly]' : null
+    noAsk ? '[Do not use MODE: ASK; assume sensibly]' : null,
+    isWebsite ? '[WEBSITE/UI INTENT DETECTED: Must use MODE: TASK with action "code". Do NOT use MODE: ASK. User wants the complete interactive HTML/CSS/JS website generated immediately.]' : null
   ].filter(Boolean).join(' ');
 
   let fileContext = '';
@@ -1149,6 +1285,17 @@ async function startFlow({
         }
       }
     }
+  }
+
+  // Automatic Website Intent Guard: When user explicitly wants a website/UI created,
+  // NEVER stall on MODE: ASK or print partial chat prose in MODE: GENERAL. Route straight to MODE: TASK!
+  if (isWebsite && (mode === 'ASK' || mode === 'GENERAL' || !mode)) {
+    mode = 'TASK';
+    body = JSON.stringify({
+      asks: [{ id: 'a1', text: `Build a complete, production-grade interactive HTML, CSS (Tailwind CDN), and JavaScript website for: ${text}`, type: 'task' }],
+      weight: 'heavy',
+      language: langStyle || (isUrdu ? 'roman_urdu' : 'en')
+    });
   }
 
   if (!mode) mode = 'GENERAL';
@@ -1672,16 +1819,17 @@ async function continueRun({
         continue;
       }
 
+      const isWeb = isWebsiteOrWebUiRequest(spec) || isWebsiteOrWebUiRequest(run.userText);
       const memoryContext = (run.relevantMemories && run.relevantMemories.length > 0)
         ? formatMemoriesForPrompt(run.relevantMemories)
         : '';
-      const out = await writeCode(spec, signal, memoryContext);
+      const out = await writeCode(spec, signal, memoryContext, isWeb);
       const id = 'c' + (++nb.counters.c);
-      const detectedL = detectProgrammingLanguageDynamically(spec, out.content) || 'html';
+      const detectedL = isWeb ? 'html' : (detectProgrammingLanguageDynamically(spec, out.content) || 'html');
 
       const art = {
         id,
-        title: step.title || 'Code Artifact',
+        title: step.title || (isWeb ? 'Interactive Website (HTML/CSS/JS)' : 'Code Artifact'),
         kind: 'code',
         language: detectedL,
         note: out.note,

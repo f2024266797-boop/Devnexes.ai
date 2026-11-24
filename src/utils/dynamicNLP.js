@@ -119,6 +119,39 @@ export function extractCodeLanguage(text = '') {
 }
 
 /**
+ * Detects whether a user prompt or spec is requesting to build, code, design, or create
+ * a website, web page, landing page, portfolio, ecommerce store, web app, or frontend UI.
+ * Handles English, Roman Urdu, and Urdu natively.
+ */
+export function isWebsiteOrWebUiRequest(text = '') {
+  if (!text || typeof text !== 'string') return false;
+  const clean = text.trim();
+  if (!clean) return false;
+
+  // Native Urdu / Arabic script check
+  if (/[\u0600-\u06FF]/.test(clean)) {
+    if (/ویب\s*سائٹ|ویب|صفحہ|پورٹ\s*فولیو|لینڈنگ|ڈیش\s*بورڈ|آن\s*لائن\s*سٹور/.test(clean)) return true;
+  }
+
+  const lower = clean.toLowerCase();
+
+  // Core explicit keywords
+  const coreWebKeywords = /\b(?:website|webpage|web\s*site|web\s*page|landing\s*page|portfolio(?:\s*(?:site|website|page))?|ecommerce(?:\s*(?:site|website|store|shop))?|e-commerce(?:\s*(?:site|website|store|shop))?|web\s*app|webapp|frontend(?:\s*(?:ui|app|page|site))?|dashboard(?:\s*(?:ui|page|site|web))?|html\s*css|html\s*css\s*js)\b/i;
+  if (coreWebKeywords.test(lower)) {
+    return true;
+  }
+
+  // Action verbs + site/page/store terms in Roman Urdu & English
+  const actionVerbs = /\b(?:banao|bana\s*do|banani|chahiye|create|build|make|design|code|develop|generate)\b/i;
+  const webTargets = /\b(?:site|page|portal|store|shop|ui|frontend|template)\b/i;
+  if (actionVerbs.test(lower) && webTargets.test(lower)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Detects programming language dynamically from prompt or code snippet.
  * Discovers syntax patterns (e.g. #include, def, class, import, package) and file tags
  * without maintaining static word dictionaries.
@@ -127,6 +160,11 @@ export function detectProgrammingLanguageDynamically(prompt = '', snippet = '') 
   // First check code fences or shebang in snippet / prompt
   const fromCode = extractCodeLanguage(snippet) || extractCodeLanguage(prompt);
   if (fromCode) return fromCode;
+
+  // Website requests always target HTML/CSS/JS Canvas Live Preview
+  if (isWebsiteOrWebUiRequest(prompt) || isWebsiteOrWebUiRequest(snippet)) {
+    return 'html';
+  }
 
   const combined = `${prompt} ${snippet}`.trim();
   if (!combined) return null;
@@ -322,10 +360,11 @@ export function analyzePromptIntent({
   const clean = String(prompt || '').trim();
   const lower = clean.toLowerCase();
 
-  const detectedLang = detectProgrammingLanguageDynamically(clean);
+  const isWebReq = isWebsiteOrWebUiRequest(clean);
+  const detectedLang = isWebReq ? 'html' : detectProgrammingLanguageDynamically(clean);
   const hasCodeFence = clean.includes('```');
 
-  if (forceCanvasCode || hasCodeFence || Boolean(detectedLang)) {
+  if (forceCanvasCode || hasCodeFence || isWebReq || Boolean(detectedLang)) {
     return {
       isCode: true,
       isIncrementalEdit: Boolean(hasExistingArtifact && !clean.includes('```')),
