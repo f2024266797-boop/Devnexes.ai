@@ -127,17 +127,87 @@
   color: #ffffff;
 }
 
+/* ── 100% Accurate Mobile Responsive Tables (Zero Horizontal / Vertical Scroll) ── */
+.markdown-table-wrapper {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+}
+
 .markdown-body table {
   border-collapse: collapse;
-  word-break: normal;
-  overflow-wrap: normal;
   width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 640px) {
+  .markdown-body table {
+    table-layout: auto;
+  }
 }
 
 .markdown-body th,
 .markdown-body td {
-  word-break: normal;
-  overflow-wrap: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+
+.markdown-body th {
+  white-space: normal;
+}
+
+@media (min-width: 640px) {
+  .markdown-body th {
+    white-space: nowrap;
+  }
+}
+
+.markdown-body td code,
+.markdown-body th code {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+@media (max-width: 640px) {
+  .markdown-table-wrapper {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    border-radius: 10px !important;
+    overflow-x: hidden !important;
+    overflow-y: hidden !important;
+  }
+
+  .markdown-body table {
+    table-layout: fixed !important;
+    width: 100% !important;
+    font-size: 11.5px !important;
+  }
+
+  .markdown-body th {
+    padding: 6px 5px !important;
+    font-size: 10.5px !important;
+    line-height: 1.25 !important;
+    letter-spacing: 0.02em !important;
+  }
+
+  .markdown-body td {
+    padding: 6px 5px !important;
+    font-size: 11.5px !important;
+    line-height: 1.35 !important;
+  }
+
+  .markdown-body td code,
+  .markdown-body th code {
+    font-size: 10.5px !important;
+    padding: 1px 3px !important;
+  }
 }
 
 /* ── Brand Color ─────────────────────────────────────────────── */
@@ -539,46 +609,56 @@ main::-webkit-scrollbar {
   animation: shimmerSweep 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
-/* ── Left-to-Right Subtle Shimmer / Blink Animation for Active Node Title ── */
-@keyframes blinkLeftToRight {
+/* ── Right-to-Left Subtle Soft Shimmer Animation for Active Node Title ── */
+@keyframes blinkRightToLeft {
   0% {
-    background-position: -150% 0;
+    background-position: 0% 50%;
   }
   100% {
-    background-position: 150% 0;
+    background-position: 200% 50%;
   }
 }
 
+.animate-blink-right-to-left,
 .animate-blink-left-to-right {
+  color: #64748b;
   background: linear-gradient(
     90deg,
-    #334155 0%,
-    #475569 25%,
-    #090d16 50%,
-    #475569 75%,
-    #334155 100%
+    #64748b 0%,
+    #64748b 25%,
+    #cbd5e1 50%,
+    #64748b 75%,
+    #64748b 100%
   );
   background-size: 200% 100%;
+  background-repeat: repeat-x;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   display: inline-block;
-  animation: blinkLeftToRight 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  font-weight: 400;
+  animation: blinkRightToLeft 2.4s linear infinite;
+  will-change: background-position;
 }
 
+.dark .animate-blink-right-to-left,
 .dark .animate-blink-left-to-right {
+  color: #94a3b8;
   background: linear-gradient(
     90deg,
     #94a3b8 0%,
-    #cbd5e1 25%,
-    #ffffff 50%,
-    #cbd5e1 75%,
+    #94a3b8 25%,
+    #f1f5f9 50%,
+    #94a3b8 75%,
     #94a3b8 100%
   );
   background-size: 200% 100%;
+  background-repeat: repeat-x;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   display: inline-block;
-  animation: blinkLeftToRight 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  font-weight: 400;
+  animation: blinkRightToLeft 2.4s linear infinite;
+  will-change: background-position;
 }

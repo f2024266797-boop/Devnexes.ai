@@ -94,19 +94,22 @@ export const DETAILED_SKILLS = {
   }
 };
 
-export function getMatchingSkill(prompt) {
-  const cleanPrompt = (prompt || '').toLowerCase();
+import { detectProgrammingLanguageDynamically } from '../utils/dynamicNLP.js';
 
-  if (cleanPrompt.includes('c++') || cleanPrompt.includes('cpp')) {
+export function getMatchingSkill(prompt = '') {
+  const detectedLang = detectProgrammingLanguageDynamically(prompt);
+
+  // Dynamic programming language & framework mapping
+  if (detectedLang === 'cpp' || detectedLang === 'c') {
     return DETAILED_SKILLS['cpp-engineering'];
   }
-  if (cleanPrompt.includes('python')) {
+  if (detectedLang === 'python') {
     return DETAILED_SKILLS['python-engineering'];
   }
-  if (cleanPrompt.includes('java')) {
+  if (detectedLang === 'java') {
     return DETAILED_SKILLS['java-engineering'];
   }
-  if (cleanPrompt.includes('html') || cleanPrompt.includes('css') || cleanPrompt.includes('ui') || cleanPrompt.includes('website') || cleanPrompt.includes('frontend')) {
+  if (detectedLang === 'html' || detectedLang === 'css' || detectedLang === 'javascript' || detectedLang === 'typescript') {
     return DETAILED_SKILLS['frontend-design'];
   }
 

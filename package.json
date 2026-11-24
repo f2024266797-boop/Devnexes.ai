@@ -11,11 +11,15 @@
   },
   "dependencies": {
     "groq-sdk": "^1.4.0",
+    "ignore": "^7.0.16",
+    "jszip": "^3.10.2",
     "lucide-react": "^1.27.0",
+    "mammoth": "^1.13.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

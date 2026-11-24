@@ -1,4 +1,4 @@
-import React, { useState, useMemo, memo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, memo } from 'react';
 import {
   Plus,
   MessageSquare,
@@ -14,8 +14,11 @@ import {
   Search,
   Pencil,
   Sparkles,
-  Clock
+  Clock,
+  MoreVertical,
+  Brain
 } from 'lucide-react';
+import { getAllMemories } from '../services/memoryRagService';
 
 function getConversationTimestamp(conv, index) {
   if (conv?.updatedAt) {
@@ -60,6 +63,7 @@ function Sidebar({
   onClearAllConvs,
   hasApiKey,
   onOpenApiKeyModal,
+  onOpenMemoryModal,
   isDarkMode,
   onToggleTheme,
   isCollapsed,
@@ -71,6 +75,32 @@ function Sidebar({
   const [editingId, setEditingId] = useState(null);
   const [editingTitle, setEditingTitle] = useState('');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState(null);
+  const [memoryCount, setMemoryCount] = useState(() => {
+    try {
+      return getAllMemories().length;
+    } catch {
+      return 0;
+    }
+  });
+
+  useEffect(() => {
+    const handleMemoryUpdated = (e) => {
+      setMemoryCount(e?.detail?.count ?? getAllMemories().length);
+    };
+    window.addEventListener('devnexes-memory-updated', handleMemoryUpdated);
+    return () => window.removeEventListener('devnexes-memory-updated', handleMemoryUpdated);
+  }, []);
+
+  useEffect(() => {
+    const handleGlobalClick = () => {
+      setOpenMenuId(null);
+    };
+    if (openMenuId) {
+      window.addEventListener('click', handleGlobalClick);
+      return () => window.removeEventListener('click', handleGlobalClick);
+    }
+  }, [openMenuId]);
 
   const handleMobileClose = () => {
     if (typeof window !== 'undefined' && window.innerWidth < 768 && !isCollapsed) {
@@ -160,19 +190,18 @@ function Sidebar({
         />
       )}
 
-      <aside 
-        className={`fixed md:relative inset-y-0 left-0 z-50 shrink-0 border-r border-slate-200/80 dark:border-slate-800/80 bg-[#f8fafc] dark:bg-[#090d1a] flex flex-col h-full transition-all duration-300 ease-in-out select-none font-sans shadow-2xl md:shadow-none ${
-          isCollapsed ? '-translate-x-full md:translate-x-0 md:w-16' : 'translate-x-0 w-[268px] sm:w-[260px] md:w-[246px]'
-        }`}
+      <aside
+        className={`fixed md:relative inset-y-0 left-0 z-50 shrink-0 border-r border-slate-200/80 dark:border-slate-800/80 bg-[#f8fafc] dark:bg-[#090d1a] flex flex-col h-full transition-all duration-300 ease-in-out select-none font-sans shadow-2xl md:shadow-none ${isCollapsed ? '-translate-x-full md:translate-x-0 md:w-16' : 'translate-x-0 w-[268px] sm:w-[260px] md:w-[246px]'
+          }`}
       >
         {/* Header: Clean Brand & Fast Action Icons */}
         <div className="h-11 px-2.5 flex items-center justify-between shrink-0 border-b border-slate-200/50 dark:border-slate-800/50">
           {!isCollapsed ? (
             <>
               <div className="flex items-center space-x-2 animate-fade-in min-w-0">
-                <img 
-                  src="/devnexes-logo.png" 
-                  alt="Devnexes AI" 
+                <img
+                  src="/devnexes-logo.png"
+                  alt="Devnexes AI"
                   className="w-5.5 h-5.5 object-contain rounded-md"
                 />
                 <span className="font-semibold text-[13px] text-slate-800 dark:text-slate-100 tracking-tight truncate">
@@ -186,11 +215,10 @@ function Sidebar({
                       setIsSearchOpen(prev => !prev);
                       if (isSearchOpen) setSearchQuery('');
                     }}
-                    className={`w-6.5 h-6.5 flex items-center justify-center rounded-lg transition-colors cursor-pointer ${
-                      isSearchOpen || searchQuery
+                    className={`w-6.5 h-6.5 flex items-center justify-center rounded-lg transition-colors cursor-pointer ${isSearchOpen || searchQuery
                         ? 'text-[#0066FF] dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60'
                         : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800/60'
-                    }`}
+                      }`}
                     title={isSearchOpen ? 'Close Search' : 'Search Chats'}
                   >
                     <Search size={13} />
@@ -236,11 +264,10 @@ function Sidebar({
                   onNewChat();
                   handleMobileClose();
                 }}
-                className={`w-full h-9 sm:h-8.5 flex items-center justify-between px-3 sm:px-2.5 rounded-xl text-xs sm:text-xs font-semibold transition-all duration-150 cursor-pointer group ${
-                  activeView === 'chat'
+                className={`w-full h-9 sm:h-8.5 flex items-center justify-between px-3 sm:px-2.5 rounded-xl text-xs sm:text-xs font-semibold transition-all duration-150 cursor-pointer group ${activeView === 'chat'
                     ? 'bg-[#0066FF] hover:bg-blue-600 active:scale-[0.98] text-white shadow-xs shadow-blue-500/20'
                     : 'bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-slate-800'
-                }`}
+                  }`}
                 title="Start New Chat"
               >
                 <div className="flex items-center space-x-2">
@@ -255,11 +282,10 @@ function Sidebar({
                   onSelectView?.('images');
                   handleMobileClose();
                 }}
-                className={`w-full h-9 sm:h-8.5 flex items-center justify-between px-3 sm:px-2.5 rounded-xl text-xs sm:text-xs font-semibold transition-all duration-150 cursor-pointer group ${
-                  activeView === 'images'
+                className={`w-full h-9 sm:h-8.5 flex items-center justify-between px-3 sm:px-2.5 rounded-xl text-xs sm:text-xs font-semibold transition-all duration-150 cursor-pointer group ${activeView === 'images'
                     ? 'bg-blue-50 dark:bg-blue-950/80 text-[#0066FF] dark:text-blue-400 border border-blue-200/90 dark:border-blue-800 shadow-2xs'
                     : 'bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-slate-800'
-                }`}
+                  }`}
                 title="AI Image Studio"
               >
                 <div className="flex items-center space-x-2">
@@ -280,11 +306,10 @@ function Sidebar({
                     onNewChat();
                     handleMobileClose();
                   }}
-                  className={`w-8.5 h-8.5 flex items-center justify-center rounded-xl transition-all duration-150 cursor-pointer ${
-                    activeView === 'chat'
+                  className={`w-8.5 h-8.5 flex items-center justify-center rounded-xl transition-all duration-150 cursor-pointer ${activeView === 'chat'
                       ? 'bg-[#0066FF] hover:bg-blue-600 text-white shadow-xs'
                       : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
+                    }`}
                   title="New Chat"
                 >
                   <Plus size={16} strokeWidth={2.5} />
@@ -302,11 +327,10 @@ function Sidebar({
                     onSelectView?.('images');
                     handleMobileClose();
                   }}
-                  className={`w-8.5 h-8.5 flex items-center justify-center rounded-xl transition-all duration-150 cursor-pointer ${
-                    activeView === 'images'
+                  className={`w-8.5 h-8.5 flex items-center justify-center rounded-xl transition-all duration-150 cursor-pointer ${activeView === 'images'
                       ? 'bg-blue-50 dark:bg-blue-950/80 text-[#0066FF] dark:text-blue-400 border border-blue-200/90 dark:border-blue-800'
                       : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
+                    }`}
                   title="AI Images Studio"
                 >
                   <Sparkles size={15} />
@@ -406,8 +430,8 @@ function Sidebar({
                       handleMobileClose();
                     }}
                     className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer ${isActive
-                        ? 'bg-blue-50 dark:bg-blue-950/80 border border-blue-200/90 dark:border-blue-800/80 text-[#0066FF] dark:text-blue-400 shadow-2xs'
-                        : 'text-slate-400 dark:text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 border border-transparent'
+                      ? 'bg-blue-50 dark:bg-blue-950/80 border border-blue-200/90 dark:border-blue-800/80 text-[#0066FF] dark:text-blue-400 shadow-2xs'
+                      : 'text-slate-400 dark:text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 border border-transparent'
                       }`}
                   >
                     <MessageSquare size={15} />
@@ -464,8 +488,43 @@ function Sidebar({
           )}
         </div>
 
-        {/* Footer: API Key & Theme */}
+        {/* Footer: Memory, API Key & Theme */}
         <div className="p-2 border-t border-slate-200/60 dark:border-slate-800/60 space-y-1 shrink-0 bg-white/40 dark:bg-[#060914]/40">
+
+          {/* Memory & Knowledge Base Button (RAG Storage) */}
+          <div className="relative group flex justify-center">
+            <button
+              onClick={onOpenMemoryModal}
+              className={`w-full h-8 flex items-center justify-between px-2.5 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer ${
+                isCollapsed ? 'w-9 h-8 justify-center px-0' : ''
+              }`}
+              title={!isCollapsed ? 'Long-Term Memory & Knowledge Base (RAG)' : ''}
+            >
+              <div className="flex items-center space-x-2 min-w-0">
+                <Brain size={14} className="text-purple-500 shrink-0" />
+                {!isCollapsed && (
+                  <span className="truncate text-[11.5px]">
+                    Memory Storage
+                  </span>
+                )}
+              </div>
+              {!isCollapsed && (
+                <span className="px-1.5 py-0.2 rounded-full bg-purple-100 dark:bg-purple-950/80 text-[10px] font-mono font-medium text-purple-700 dark:text-purple-300 shrink-0">
+                  {memoryCount}
+                </span>
+              )}
+            </button>
+
+            {/* Collapsed Tooltip */}
+            {isCollapsed && (
+              <div className="absolute left-[calc(100%+8px)] top-1/2 -translate-y-1/2 hidden group-hover:flex items-center z-50 pointer-events-none animate-fade-in">
+                <div className="px-2.5 py-1 rounded-lg bg-slate-900 dark:bg-slate-800 text-white text-[11px] font-medium shadow-xl whitespace-nowrap border border-slate-700/50 flex items-center space-x-1.5">
+                  <Brain size={12} className="text-purple-400" />
+                  <span>Memory ({memoryCount} rules)</span>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* API Key Status Item */}
           <div className="relative group flex justify-center">
@@ -632,8 +691,8 @@ function Sidebar({
           handleMobileClose();
         }}
         className={`group relative flex items-center justify-between h-9 sm:h-8.5 px-3 sm:px-2.5 rounded-xl text-xs sm:text-xs cursor-pointer transition-all duration-150 ${isActive
-            ? 'bg-slate-200/80 dark:bg-slate-800/80 text-slate-900 dark:text-white font-medium shadow-2xs'
-            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/40 border border-transparent font-normal'
+          ? 'bg-slate-200/80 dark:bg-slate-800/80 text-slate-900 dark:text-white font-medium shadow-2xs'
+          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/40 border border-transparent font-normal'
           }`}
         title={conv.title}
       >
@@ -641,8 +700,8 @@ function Sidebar({
           <MessageSquare
             size={14}
             className={`shrink-0 transition-colors ${isActive
-                ? 'text-[#0066FF] dark:text-blue-400'
-                : 'text-slate-400/80 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300'
+              ? 'text-[#0066FF] dark:text-blue-400'
+              : 'text-slate-400/80 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300'
               }`}
           />
           <span className="truncate text-[13.5px] sm:text-[12.5px] leading-tight">
@@ -650,29 +709,60 @@ function Sidebar({
           </span>
         </div>
 
-        {/* Action buttons on hover */}
-        <div className="flex items-center space-x-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-1">
-          {onRenameConv && (
-            <button
-              onClick={(e) => startEditing(conv, e)}
-              className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-300/60 dark:hover:bg-slate-700/60 transition-colors cursor-pointer"
-              title="Rename"
-            >
-              <Pencil size={11} />
-            </button>
-          )}
+        {/* 3-Dots Action Button on Hover & Active */}
+        <div className="relative shrink-0 ml-1" onClick={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpenMenuId(prev => (prev === conv.id ? null : conv.id));
+            }}
+            className={`p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-300/60 dark:hover:bg-slate-700/60 transition-all cursor-pointer ${
+              openMenuId === conv.id
+                ? 'opacity-100 bg-slate-300/60 dark:bg-slate-700/60 text-slate-700 dark:text-slate-200'
+                : isActive
+                  ? 'opacity-80 group-hover:opacity-100'
+                  : 'opacity-0 group-hover:opacity-100 focus:opacity-100'
+            }`}
+            title="Chat options"
+          >
+            <MoreVertical size={13} />
+          </button>
 
-          {conversations.length > 1 && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setConfirmDeleteId(conv.id);
-              }}
-              className="p-1 rounded text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
-              title="Delete"
+          {/* Floating 3-dots Dropdown Menu */}
+          {openMenuId === conv.id && (
+            <div
+              className="absolute right-0 top-full mt-1 z-50 w-36 py-1 rounded-xl bg-white dark:bg-[#0f1424] border border-slate-200 dark:border-slate-800 shadow-xl animate-fade-in backdrop-blur-xl text-xs select-none"
+              onClick={(e) => e.stopPropagation()}
             >
-              <Trash2 size={11} />
-            </button>
+              {onRenameConv && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    setOpenMenuId(null);
+                    startEditing(conv, e);
+                  }}
+                  className="w-full flex items-center space-x-2 px-3 py-1.5 text-left text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors cursor-pointer"
+                >
+                  <Pencil size={12} className="text-slate-400" />
+                  <span>Rename</span>
+                </button>
+              )}
+
+              {conversations.length > 1 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    setOpenMenuId(null);
+                    setConfirmDeleteId(conv.id);
+                  }}
+                  className="w-full flex items-center space-x-2 px-3 py-1.5 text-left text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                >
+                  <Trash2 size={12} />
+                  <span>Delete chat</span>
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>

@@ -4,6 +4,9 @@
  * Exclusively executes all code generation and Canvas implementation tasks.
  */
 
+import { isRealApiKey } from '../utils/dynamicNLP.js';
+import { retrieveRelevantMemories, formatMemoriesForPrompt } from './memoryRagService.js';
+
 export const DEFAULT_GEMINI_MODEL = import.meta.env?.VITE_GEMINI_MODEL || import.meta.env?.GEMINI_MODEL || 'gemini-3-flash-preview';
 
 const COOLDOWN_DURATION_MS = 60 * 1000; // 60 seconds cooldown for rate-limited keys
@@ -26,10 +29,10 @@ export function getGeminiApiKeys() {
   return [0, 1, 2].map(idx => {
     try {
       const stored = localStorage.getItem(`devnexes_gemini_key_${idx + 1}`);
-      if (stored && stored.trim()) return stored.trim();
-    } catch {}
-    if (envKeys[idx] && envKeys[idx].trim()) return envKeys[idx].trim();
-    if (idx === 0 && singleLegacy && singleLegacy.trim()) return singleLegacy.trim();
+      if (stored && isRealApiKey(stored)) return stored.trim();
+    } catch { }
+    if (envKeys[idx] && isRealApiKey(envKeys[idx])) return envKeys[idx].trim();
+    if (idx === 0 && singleLegacy && isRealApiKey(singleLegacy)) return singleLegacy.trim();
     return '';
   });
 }
@@ -46,7 +49,7 @@ export function saveGeminiApiKeys(keys) {
       } else {
         localStorage.removeItem(`devnexes_gemini_key_${idx + 1}`);
       }
-    } catch {}
+    } catch { }
   });
 }
 
@@ -161,6 +164,20 @@ export async function streamGeminiCode({
     throw err;
   }
 
+  // Augment with active cross-conversation RAG memory rules & past lessons learned
+  const QUALITY_PROMPT = `Quality Guidelines:
+- Never output excessive bracket placeholders like [Supervisor/Manager ka Naam], [number of days], [start date], [end date], [Aapka Naam]. Provide realistic, natural sample details directly so the output is immediately complete and usable.
+- Never append chatty boilerplate instructions like "Just replace the placeholders in brackets...". Be direct, concise, and helpful.`;
+
+  let effectiveSystemPrompt = `${systemPrompt || ''}\n\n${QUALITY_PROMPT}`.trim();
+  try {
+    const relevantMemories = retrieveRelevantMemories(prompt, { limit: 3 });
+    const memoryBlock = formatMemoriesForPrompt(relevantMemories);
+    if (memoryBlock) {
+      effectiveSystemPrompt = `${effectiveSystemPrompt}\n\n${memoryBlock}`.trim();
+    }
+  } catch {}
+
   // Attempt generation with up to configuredKeysCount retries across keys
   let attempts = 0;
   const maxAttempts = Math.max(configuredKeysCount, 3);
@@ -182,7 +199,7 @@ export async function streamGeminiCode({
         keyIndex: index,
         prompt,
         image,
-        systemPrompt,
+        systemPrompt: effectiveSystemPrompt,
         history,
         model,
         onChunk,

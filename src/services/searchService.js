@@ -11,6 +11,8 @@
  * deduplicate sources, and forward the combined real-time knowledge to Groq for factual synthesis.
  */
 
+import { isRealApiKey, cleanDynamicSearchQuery, hasFuzzyWord } from '../utils/dynamicNLP.js';
+
 export function getSearchKeys() {
   let tavilyKey = '';
   let braveKey = '';
@@ -33,9 +35,9 @@ export function getSearchKeys() {
   }
 
   return {
-    tavilyKey: tavilyKey.trim(),
-    braveKey: braveKey.trim(),
-    searxngUrl: searxngUrl.trim()
+    tavilyKey: isRealApiKey(tavilyKey) ? tavilyKey.trim() : '',
+    braveKey: isRealApiKey(braveKey) ? braveKey.trim() : '',
+    searxngUrl: (searxngUrl && !searxngUrl.includes('your_')) ? searxngUrl.trim() : ''
   };
 }
 
@@ -425,59 +427,31 @@ async function searchWithDuckDuckGoAndWikipedia(query, signal) {
   return results;
 }
 
+
+
 /**
- * Clean & optimize queries by removing conversational English / Urdu filler
- * so search engines return exact, high-authority real-world ground truth.
+ * Clean & optimize queries dynamically by removing conversational filler,
+ * greetings, and search command verbs so search engines receive exact entities.
  */
 export function extractOptimizedSearchQuery(rawQuery) {
-  if (!rawQuery) return '';
-  const cleaned = rawQuery
-    .replace(/^\/?(?:google|search|find)\b/i, '')
-    .replace(/\b(?:search on google|search for|look up|find out about|tell me about|give me information about)\b/gi, '')
-    .replace(/\b(?:google py|google pe|search karo|search karein|pury internet sy dundho|dhoondo|dhundo|pata karo|btao|batayein|koun hai|kon hai|kya hai)\b/gi, '')
-    .replace(/\b(?:real tme|real time|live search|latest info|in roman english|in roman urdu|roman english ma|roman english me|roman urdu me|roman urdu ma|batao|batado|nad btao|aur batao|nad|and)\b/gi, '')
-    .replace(/\b(?:website banao|portfolio banao|code likho|script banao|build a website for|create a portfolio for|strictly based on his|strictly based on her|based on his|based on her|strictly based on)\b/gi, '')
-    .replace(/\b(?:ka|ki|ke|ko|se|sy|par|pe|me|mein|ma)\b/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  return cleaned || rawQuery.trim();
+  return cleanDynamicSearchQuery(rawQuery);
 }
 
 /**
- * Resolves contextual search query from conversation history when user asks
- * follow-up search queries (e.g. "real time search karo", "dobara search karo", "isko dhoondo")
+ * Resolves contextual search query from conversation history dynamically
+ * when user asks short follow-up search queries without an explicit subject.
  */
 export function resolveContextualSearchQuery(prompt, messagesHistory = []) {
   if (!prompt || typeof prompt !== 'string') return '';
-  const lower = prompt.toLowerCase().trim();
+  const clean = cleanDynamicSearchQuery(prompt);
 
-  // 1. Normalize common typos and company name variations
-  const normalized = prompt
-    .replace(/\b(?:exes|devnexes|dev nexes)\s*(?:dgital|digital)\s*(?:solutions|solution)\b/gi, 'Devnexes Digital Solutions')
-    .replace(/\bdgital\b/gi, 'digital')
-    .replace(/\bsililar\b/gi, 'similar');
-
-  const clean = extractOptimizedSearchQuery(normalized);
-
-  // 2. Detect if current query is a generic instruction without an explicit subject/entity
-  const isGenericFollowUp = (
-    !clean ||
-    clean.length < 4 ||
-    /^(real tme|real time|search|search karo|dhundo|dhoondo|pata karo|btao|batayein|check|verify|again|dobara|details|info|karo|batao|riman english|roman english|in roman english)$/i.test(clean) ||
-    (/\b(real tme|real time|dobara|again|isme|is me|iske|is ke|is company|us company|isi)\b/i.test(lower) && !/\b(devnexes|google|microsoft|apple|openai|chatgpt|amazon|meta|tesla|linkedin|software|tech|solutions)\b/i.test(clean))
-  );
-
-  // 3. Inspect recent conversation history to locate the real subject/entity
-  if (isGenericFollowUp && messagesHistory && messagesHistory.length > 0) {
+  // If current query is short without an explicit entity, inspect recent conversation dynamically
+  if (clean.length < 12 && messagesHistory && messagesHistory.length > 0) {
     for (let i = messagesHistory.length - 1; i >= 0; i--) {
       const msg = messagesHistory[i];
       if (msg.role === 'user' && msg.content) {
-        const prevText = msg.content
-          .replace(/\b(?:exes|devnexes|dev nexes)\s*(?:dgital|digital)\s*(?:solutions|solution)\b/gi, 'Devnexes Digital Solutions')
-          .replace(/\bdgital\b/gi, 'digital');
-        const prevClean = extractOptimizedSearchQuery(prevText);
-        if (prevClean && prevClean.length >= 4 && !/^(hi|hello|salam|ok|haan|ji|yes|no)$/i.test(prevClean)) {
+        const prevClean = cleanDynamicSearchQuery(msg.content);
+        if (prevClean && prevClean.length >= 10) {
           return prevClean;
         }
       }

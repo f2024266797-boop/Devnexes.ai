@@ -333,14 +333,14 @@ function MarkdownRenderer({ content, onOpenIdePanel }) {
             );
           },
           table: ({ children }) => (
-            <div className="my-3.5 sm:my-4 overflow-x-auto rounded-xl border border-neutral-200 dark:border-neutral-800 shadow-2xs max-w-full bg-white dark:bg-[#0d1017]">
-              <table className="w-full text-[13.5px] sm:text-[14px] text-left text-neutral-700 dark:text-neutral-300 border-collapse">
+            <div className="markdown-table-wrapper my-3 sm:my-4 w-full max-w-full rounded-xl border border-neutral-200/90 dark:border-neutral-800 shadow-2xs bg-white dark:bg-[#0d1017] overflow-x-auto overflow-y-visible">
+              <table className="w-full max-w-full text-[12px] sm:text-[14px] text-left text-neutral-700 dark:text-neutral-300 border-collapse table-fixed sm:table-auto">
                 {children}
               </table>
             </div>
           ),
           thead: ({ children }) => (
-            <thead className="bg-neutral-100/80 dark:bg-neutral-850 text-neutral-900 dark:text-neutral-100 font-semibold border-b border-neutral-200 dark:border-neutral-800">
+            <thead className="bg-neutral-100/90 dark:bg-neutral-850 text-neutral-900 dark:text-neutral-100 font-semibold border-b border-neutral-200 dark:border-neutral-800">
               {children}
             </thead>
           ),
@@ -355,12 +355,12 @@ function MarkdownRenderer({ content, onOpenIdePanel }) {
             </tr>
           ),
           th: ({ children }) => (
-            <th className="px-4 py-2.5 text-[11.5px] font-semibold uppercase tracking-wider text-neutral-600 dark:text-neutral-400 whitespace-nowrap bg-neutral-100/80 dark:bg-neutral-850">
+            <th className="px-2.5 sm:px-4 py-2 sm:py-2.5 text-[10.5px] sm:text-[11.5px] font-semibold uppercase tracking-wider text-neutral-600 dark:text-neutral-400 bg-neutral-100/90 dark:bg-neutral-850 whitespace-normal sm:whitespace-nowrap break-words align-bottom">
               {parseBreaks(children)}
             </th>
           ),
           td: ({ children }) => (
-            <td className="px-4 py-3 text-[13.5px] sm:text-[14px] leading-relaxed align-top">
+            <td className="px-2.5 sm:px-4 py-2 sm:py-3 text-[12px] sm:text-[14px] leading-snug sm:leading-relaxed align-top break-words">
               {parseBreaks(children)}
             </td>
           ),

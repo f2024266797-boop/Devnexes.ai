@@ -4,122 +4,29 @@
  */
 
 import { DETAILED_SKILLS, getMatchingSkill } from '../skills/index.js';
-import { callGroqChatJson } from './groqService.js';
+import { callGroqChatJson, hasGroqApiKey } from './groqService.js';
 import { detectOfficialBrandLogo } from './imageService.js';
 import { resolveContextualSearchQuery } from './searchService.js';
+import {
+  detectProgrammingLanguageDynamically,
+  analyzePromptIntent,
+  dynamicallyFuseImagePrompt,
+  cleanDynamicSearchQuery,
+  hasFuzzyWord,
+  isUrduOrHindi,
+  resolveBrandLogoDynamically
+} from '../utils/dynamicNLP.js';
 
 const GROQ_MODEL = import.meta.env?.VITE_GROQ_MODEL || import.meta.env?.GROQ_MODEL || 'qwen/qwen3.8-27b';
 const ALLOWED_NODE_TYPES = new Set(['search', 'code', 'cmd', 'analysis', 'vision', 'image']);
 
 /**
- * Authoritative Programming Language Detector:
- * Identifies the exact programming language requested in the prompt or present in provided code.
- * Solves C++ and C# regex boundary bugs and prioritizes explicit user language specifications.
+ * Authoritative Dynamic Programming Language Detector:
+ * Identifies the exact programming language requested in the prompt or present in provided code,
+ * with typo tolerance, alias recognition, and syntax inspection across 40+ languages.
  */
 export function detectRequestedProgrammingLanguage(prompt = '', snippet = '') {
-  const combined = (String(prompt || '') + ' ' + String(snippet || '')).trim();
-  const lower = combined.toLowerCase();
-
-  // 1. C++ (handles "c++", "cpp", "cplusplus", and C++ standard library / syntax)
-  if (
-    /(?:\bc\+\+|\bcpp\b|\bcplusplus\b|\bc\s*plus\s*plus\b|\bclang\+\+)/i.test(lower) ||
-    /#include\s*[<"][a-zA-Z0-9_./]+[>"]/i.test(combined) ||
-    /\b(using\s+namespace\s+std|std::cout|std::cin|std::vector|std::string|std::map|cout\s*<<|cin\s*>>|nullptr|\bendl\b|std::endl)\b/.test(combined) ||
-    (/\b(int|void)\s+main\s*\(/i.test(combined) && !/\bprintf\b/.test(combined))
-  ) {
-    return 'cpp';
-  }
-
-  // 2. C Language (handles "in c", "c code", "c language", stdio.h, printf)
-  if (
-    /\b(c\s+language|in\s+c\b|c\s+programming|c\s+code|c\s+me\b|c\s+mein\b)\b/i.test(lower) ||
-    /#include\s*[<"](?:stdio\.h|stdlib\.h|string\.h)[>"]/i.test(combined) ||
-    /\b(printf\s*\(|scanf\s*\(|malloc\s*\(|free\s*\(|getchar\s*\()\b/.test(combined)
-  ) {
-    return 'c';
-  }
-
-  // 3. Python (handles "python", "py", frameworks, and Python syntax)
-  if (
-    /\b(python|python3|py\b|django|flask|fastapi|pandas|numpy|scipy|matplotlib|pytorch|torch|tensorflow)\b/i.test(lower) ||
-    /\b(def\s+[a-zA-Z_]\w*\s*\(|import\s+[a-zA-Z_]\w*|from\s+[a-zA-Z_]\w*\s+import|if\s+__name__\s*==\s*['"]__main__['"])\b/.test(combined)
-  ) {
-    return 'python';
-  }
-
-  // 4. Java (handles "java", "springboot", class main, System.out.println)
-  if (
-    (/\b(java|springboot|spring\s*boot|jvm)\b/i.test(lower) && !/\b(javascript|js)\b/i.test(lower)) ||
-    /\b(public\s+class\s+\w+|public\s+static\s+void\s+main|System\.out\.println)\b/.test(combined)
-  ) {
-    return 'java';
-  }
-
-  // 5. C# / .NET (handles "c#", "csharp", "dotnet", Console.WriteLine)
-  if (
-    /(?:\bc#|\bcsharp\b|\bc-sharp\b|\bdotnet\b|\b\.net\b|unity\s+c#)/i.test(lower) ||
-    /\b(using\s+System|Console\.WriteLine)\b/.test(combined)
-  ) {
-    return 'csharp';
-  }
-
-  // 6. Rust (handles "rust", "cargo", fn main, println!)
-  if (
-    /\b(rust|cargo|rustlang)\b/i.test(lower) ||
-    /\b(fn\s+main\s*\(\)|println!\s*\(|pub\s+fn\s+|impl\s+\w+)\b/.test(combined)
-  ) {
-    return 'rust';
-  }
-
-  // 7. Go / Golang (handles "go", "golang", package main, fmt.Println)
-  if (
-    /\b(golang|go\s+language|in\s+go\b|go\s+code)\b/i.test(lower) ||
-    /\b(package\s+main|func\s+main\s*\(\)|fmt\.Println)\b/.test(combined)
-  ) {
-    return 'go';
-  }
-
-  // 8. SQL (handles queries, table creation, select/insert)
-  if (
-    /\b(sql|mysql|postgresql|postgres|sqlite|oracle\s+sql|database\s+query|query\s+likho|query\s+banao)\b/i.test(lower) ||
-    /\b(SELECT\s+.*?\s+FROM|INSERT\s+INTO|CREATE\s+TABLE|ALTER\s+TABLE)\b/i.test(combined)
-  ) {
-    return 'sql';
-  }
-
-  // 9. PHP (handles <?php, laravel, echo)
-  if (
-    /\b(php|laravel|wordpress)\b/i.test(lower) ||
-    /<\?php|\$\w+\s*=|\becho\s+['"]/.test(combined)
-  ) {
-    return 'php';
-  }
-
-  // 10. TypeScript (handles "typescript", "ts", "tsx", interfaces, type annotations)
-  if (
-    /\b(typescript|ts\b|tsx\b)\b/i.test(lower) ||
-    /\b(interface\s+\w+|type\s+\w+\s*=|:\s*(?:string|number|boolean|any)\[\])\b/.test(combined)
-  ) {
-    return 'typescript';
-  }
-
-  // 11. JavaScript / React (handles "javascript", "js", "react", node, express)
-  if (
-    /\b(javascript|js\b|node\b|nodejs|express|vanilla\s+js)\b/i.test(lower) ||
-    /\b(console\.log|const\s+\w+\s*=|let\s+\w+\s*=|require\s*\(|module\.exports)\b/.test(combined)
-  ) {
-    return 'javascript';
-  }
-
-  // 12. HTML / CSS / Web Frontend (handles "html", "css", web pages, websites)
-  if (
-    /\b(html|css|tailwind|bootstrap|webpage|web\s+page|website|landing\s+page|portfolio\s+site|frontend\s+ui)\b/i.test(lower) ||
-    /<!DOCTYPE\s+html|<html|<body|<div\b/i.test(combined)
-  ) {
-    return 'html';
-  }
-
-  return null;
+  return detectProgrammingLanguageDynamically(prompt, snippet);
 }
 
 export function extractCodeFromMarkdown(text = '') {
@@ -200,7 +107,7 @@ export function findDiagnosedCodeFromHistory(messagesHistory = []) {
 }
 
 /**
- * Authoritative Code Intent Disambiguation Engine:
+ * Authoritative Dynamic Code Intent Disambiguation Engine:
  * Accurately determines whether a user wants to:
  * 1. Surgically modify their existing code (intent: 'UPDATE_EXISTING_CODE', isIncrementalEdit: true)
  * 2. Fix code diagnosed in previous turns (intent: 'CODE_FIX', isIncrementalEdit: false)
@@ -215,119 +122,48 @@ export function detectCodeIntent({
   forceCanvasCode = false,
   messagesHistory = []
 }) {
-  const clean = String(prompt || '').toLowerCase().trim();
   const currentLang = detectRequestedProgrammingLanguage(prompt);
   const existingLang = latestArtifact?.language ? String(latestArtifact.language).toLowerCase() : null;
 
-  // 0. Dedicated Follow-up Code Fix / Defect Correction Handling
-  // If user says "fix this code", "correct this code", "error solve karo", or confirms the follow-up card:
-  const isCodeFixRequest = (
-    /\b(fix|theek|sahi|correct|repair|solve|debug)\b/i.test(clean) &&
-    /\b(code|error|errors|issue|issues|defect|defects|is code|isi code|this code|yes|ha|haan|kardo|krdo|canvas)\b/i.test(clean)
-  ) || /please (?:fix and )?correct this/i.test(clean) || /\b(fix this code|correct this code|solve error|solve errors|error solve karo)\b/i.test(clean);
+  // 0. Dedicated Follow-up Code Fix / Defect Correction Handling (pure dynamic context inspection)
+  const diagnosed = findDiagnosedCodeFromHistory(messagesHistory);
+  if (diagnosed && (currentLang || String(prompt).trim().length < 35 || !prompt.includes('?'))) {
+    const fixLang = currentLang || diagnosed.language || 'cpp';
+    const isTrueIncremental = Boolean(
+      existingLang &&
+      existingLang === fixLang &&
+      latestArtifact?.code &&
+      diagnosed.code &&
+      latestArtifact.code.includes(diagnosed.code.slice(0, 30))
+    );
 
-  if (isCodeFixRequest) {
-    const diagnosed = findDiagnosedCodeFromHistory(messagesHistory);
-    if (diagnosed) {
-      const fixLang = currentLang || diagnosed.language || 'cpp';
-      const isTrueIncremental = Boolean(
-        existingLang &&
-        existingLang === fixLang &&
-        latestArtifact?.code &&
-        diagnosed.code &&
-        latestArtifact.code.includes(diagnosed.code.slice(0, 30))
-      );
-
-      return {
-        isCode: true,
-        isIncrementalEdit: isTrueIncremental,
-        intent: isTrueIncremental ? 'UPDATE_EXISTING_CODE' : 'CODE_FIX',
-        targetLanguage: fixLang,
-        diagnosedCode: diagnosed
-      };
-    }
-  }
-
-  // Language switch detection:
-  // If user explicitly asks for or provides code in a language DIFFERENT from the existing artifact,
-  // it is NEVER an incremental edit to the old artifact!
-  // E.g. Previous was HTML, but user now enters C++, Python, Java, etc.
-  if (currentLang && existingLang && currentLang !== existingLang) {
     return {
       isCode: true,
+      isIncrementalEdit: isTrueIncremental,
+      intent: isTrueIncremental ? 'UPDATE_EXISTING_CODE' : 'CODE_FIX',
+      targetLanguage: fixLang,
+      diagnosedCode: diagnosed
+    };
+  }
+
+  // 1. Dynamic Universal Intent Analysis (analyzes verbs, targets, language switch, typo tolerance)
+  const analyzed = analyzePromptIntent({
+    prompt,
+    hasExistingArtifact,
+    latestArtifact,
+    hasImage,
+    forceCanvasCode
+  });
+
+  if (analyzed.intent === 'NON_CODE') {
+    return {
+      isCode: false,
       isIncrementalEdit: false,
-      intent: 'NEW_CODE',
-      targetLanguage: currentLang
+      intent: 'NON_CODE'
     };
   }
 
-  // 1. Explicit New Project / Topic Switch -> MUST NOT overwrite or force into previous code!
-  // E.g. "ab koi or chz bnao", "ab ek new website banao ecommerce ki", "calculator app banao", "scratch se banao"
-  const isExplicitNew = (
-    /\b(new website|new app|new project|new code|naya project|naya code|nayi website|naya website|fresh code|from scratch|scratch se|zero se|bilkul naya|completely new|different project|different app|different website|koi aur|kuch aur|koi or|kuch or|alag project|alag code|alag website|start over|start fresh)\b/i.test(clean) ||
-    (/\b(ab|now)\b/i.test(clean) && /\b(new|naya|nayi|alag|aur|or)\b/i.test(clean) && /\b(banao|build|create|make|likho)\b/i.test(clean))
-  );
-
-  if (isExplicitNew) {
-    return {
-      isCode: true,
-      isIncrementalEdit: false,
-      intent: 'NEW_CODE',
-      targetLanguage: currentLang || existingLang || 'html'
-    };
-  }
-
-  // 2. Incremental Change / Modification / Element Verbs
-  const isChangeOrModify = (
-    /\b(change|changing|modify|modifying|modification|update|updating|tweak|tweaking|edit|editing|alter|altering|revision|refactor)\b/i.test(clean) ||
-    /\b(add|addition|insert|inserting|include|put|attach|embed|append|dalo|daal|dal do|daal do|lagao|laga do|shamil|jodo)\b/i.test(clean) ||
-    /\b(remove|delete|eliminate|drop|strip|hatao|hata do|hata|nikalo|nikal do|nikal)\b/i.test(clean) ||
-    /\b(replace|swap|substitute|badlo|badal do|badal)\b/i.test(clean) ||
-    /\b(fix|theek|sahi|correct|repair|solve|theek karo|sahi karo|fix karo)\b/i.test(clean) ||
-    /\b(existing code|is code|isi code|same code|purane code|isi ma|isme|is me|is mai)\b/i.test(clean) ||
-    /\b(ya add|ye add|yeh add|isko add|isay add|ise add|add kar|add kr)\b/i.test(clean) ||
-    /\b(portfolio ma|portfolio mein|website ma|website mein|site ma|site mein|page ma|page mein|canvas ma|code ma|code mein)\b/i.test(clean) ||
-    /\b(kuch change|kuch changing|thori change|thori changing|minor change|major change)\b/i.test(clean) ||
-    /\b(navbar|header|footer|sidebar|hero|contact|about|projects?|services?|gallery|testimonials?|button|card|section|color|background|font|theme|dark mode|light mode|styling|layout|responsive|hover|animation)\b/i.test(clean)
-  );
-
-  // 3. Image uploaded to incorporate into existing code (e.g. "ya add karoo portfolio ma")
-  const isImageAddToCode = hasImage && hasExistingArtifact && (
-    isChangeOrModify ||
-    /\b(portfolio|website|site|app|page|code|canvas|add|lagao|dalo|insert|put|ye|ya)\b/i.test(clean)
-  );
-
-  // If there is an existing code artifact AND the user wants to modify/add/style/fix it:
-  if (hasExistingArtifact && (isChangeOrModify || isImageAddToCode)) {
-    return {
-      isCode: true,
-      isIncrementalEdit: true,
-      intent: 'UPDATE_EXISTING_CODE'
-    };
-  }
-
-  // 4. Brand-new code creation / inquiry detection
-  const isCodeTargetWord = /\b(code|function|program|script|algorithm|regex|sql|query|snippet|syntax|implementation|method|class|struct|loop|array|pointer|component|website|site|app|portfolio|page|html|css|javascript|typescript|python|cpp|c\+\+|java|rust|golang|csharp|php|react|vue|node)\b/i.test(clean);
-  const isCodeActionWord = /\b(banao|build|create|make|write|likho|generate|do|de|give|show|dikhao|solve|implement|develop)\b/i.test(clean);
-  const isDirectCodeInquiry = /\b(code likho|script likho|code banao|code do|code btao|code chahiye|write code|give code|show code|fix code|solve|function for|code for|program for|script for|algorithm for|implementation of|how to implement|how to write|in python|in cpp|in c\+\+|in javascript|in java|in rust|in html)\b/i.test(clean);
-  const isExplicitCodePhrase = /\b(website banao|app banao|portfolio banao|code likho|script banao|build website|create website|create app|write code)\b/i.test(clean);
-
-  const isSearchIntent = /\b(search|dhoondo|dhundo|pata karo|google|research|lookup|searc)\b/i.test(clean);
-  const isNewCodeRequest = !isSearchIntent && (forceCanvasCode || (isCodeTargetWord && isCodeActionWord) || isDirectCodeInquiry || isExplicitCodePhrase);
-
-  if (isNewCodeRequest) {
-    return {
-      isCode: true,
-      isIncrementalEdit: false,
-      intent: 'NEW_CODE'
-    };
-  }
-
-  return {
-    isCode: false,
-    isIncrementalEdit: false,
-    intent: 'NON_CODE'
-  };
+  return analyzed;
 }
 
 // A model is allowed to choose the work it needs, but its JSON must still be
@@ -348,15 +184,9 @@ function normalizePlan(rawPlan, { forceWebSearch, forceCanvasCode, userPrompt = 
   });
   const isChangeOrModifyIntent = codeIntent.isIncrementalEdit && codeIntent.intent !== 'CODE_FIX';
 
-  // Strict restriction on clarification ("restrict karo"):
-  // Clarification is ONLY permitted in extreme cases where the user prompt is completely empty or single-character gibberish.
-  // If the prompt has 2+ words or mentions any actionable keyword (website, app, code, banao, build, create, etc.),
-  // NEVER ask clarification! Automatically plan and build the solution directly.
-  const hasSubstance = cleanPrompt.length > 8 || cleanPrompt.split(/\s+/).length >= 2 ||
-    /\b(website|site|web|app|application|portfolio|ecommerce|store|shop|landing|page|code|script|program|build|banao|make|create|develop|dashboard|tool|system|game|calc|calculator|login|signup|auth|blog|api|image|photo|pic|picture|tasveer|logo)\b/i.test(cleanPrompt);
-
-  const isImageOrVisual = /\b(image|photo|pic|picture|tasveer|logo|similar|sililar|attach|base|cctv|draw|paint|visual)\b/i.test(cleanPrompt);
-  const allowClarification = Boolean(plan.needsClarification) && !hasSubstance && !isImageOrVisual;
+  // Dynamic substance check: If user prompt has 2+ words or substance, never ask clarification
+  const hasSubstance = cleanPrompt.length > 5 || cleanPrompt.split(/\s+/).length >= 2;
+  const allowClarification = Boolean(plan.needsClarification) && !hasSubstance;
   const clarificationData = allowClarification && plan.clarification && typeof plan.clarification.question === 'string' ? {
     question: plan.clarification.question.slice(0, 280),
     options: Array.isArray(plan.clarification.options) ? plan.clarification.options.slice(0, 4).map(String) : []
@@ -416,26 +246,19 @@ function normalizePlan(rawPlan, { forceWebSearch, forceCanvasCode, userPrompt = 
     nodes.push({ id: 'node_canvas_implementation', name: 'Canvas implementation', type: 'code', task: 'Create a complete runnable implementation for the user request.', inputFrom: lastNode ? [lastNode.id] : [], canParallel: false, executionStage: nodes.length + 1, searchQuery: null, artifactLanguage: 'html', artifactTitle: 'Generated artifact' });
   }
 
-  // Precise Detection of Any Code Request (large projects, full apps, or chota mota code snippets)
-  const isSearchIntent = /\b(search|dhoondo|dhundo|pata karo|google|research|lookup|searc)\b/i.test(cleanPrompt);
-  const isExplicitCodePhrase = /\b(website banao|app banao|portfolio banao|code likho|script banao|build website|create website|create app|write code)\b/i.test(cleanPrompt);
-
-  const isCodeTargetWord = /\b(code|function|program|script|algorithm|regex|sql|query|snippet|syntax|implementation|method|class|struct|loop|array|pointer|component|website|site|app|portfolio|page|html|css|javascript|typescript|python|cpp|c\+\+|java|rust|golang|csharp|php|react|vue|node)\b/i.test(cleanPrompt);
-  const isCodeActionWord = /\b(banao|build|create|make|write|likho|generate|modify|change|update|add|remove|delete|insert|replace|dalo|lagao|hatao|badlo|fix|theek|sahi|do|de|give|show|dikhao|solve|implement|how to|kaise|kese|sample|example)\b/i.test(cleanPrompt);
-  const isDirectCodeInquiry = /\b(code likho|script likho|code banao|code do|code btao|code chahiye|write code|give code|show code|fix code|solve|function for|code for|program for|script for|algorithm for|implementation of|how to implement|how to write|in python|in cpp|in c\+\+|in javascript|in java|in rust|in html)\b/i.test(cleanPrompt);
-
-  const isAnyCodeRequest = !isSearchIntent && (forceCanvasCode || (isCodeTargetWord && isCodeActionWord) || isDirectCodeInquiry || isExplicitCodePhrase);
+  // Dynamic Detection of Code / Search Request purely from structural cues
+  const isSearchIntent = forceWebSearch || cleanPrompt.startsWith('/search');
+  const detectedLangInPrompt = detectProgrammingLanguageDynamically(cleanPrompt);
+  const isAnyCodeRequest = !isSearchIntent && (forceCanvasCode || Boolean(detectedLangInPrompt) || cleanPrompt.includes('```') || cleanPrompt.startsWith('/code'));
 
   // Pure non-code questions or search requests
   const isPureNonCodeQuestion = !isAnyCodeRequest && (
     cleanPrompt.endsWith('?') ||
-    isSearchIntent ||
-    /\b(kya|what|who|kon|koun|where|kahan|when|kab|why|kyun|tell me about|explain|samjhao|difference|farq|meaning|matlab)\b/i.test(cleanPrompt) ||
-    /\b(devnexes|ducky|chatgpt|openai|ai)\b/i.test(cleanPrompt)
+    isSearchIntent
   );
 
   // If this is a search request or pure non-code question, strip hallucinated code nodes!
-  if ((isSearchIntent || isPureNonCodeQuestion) && !forceCanvasCode) {
+  if ((isSearchIntent || isPureNonCodeQuestion) && !forceCanvasCode && !detectedLangInPrompt && !cleanPrompt.includes('```')) {
     for (let i = nodes.length - 1; i >= 0; i--) {
       if (nodes[i].type === 'code' || (nodes[i].type === 'analysis' && /\b(code|implementation|canvas|blueprint)\b/i.test(nodes[i].name || ''))) {
         nodes.splice(i, 1);
@@ -445,9 +268,7 @@ function normalizePlan(rawPlan, { forceWebSearch, forceCanvasCode, userPrompt = 
 
   // If user asked to search, ensure a web search node is present
   if (isSearchIntent && !forceCanvasCode && !nodes.some(n => n.type === 'search')) {
-    const cleanSearchQuery = cleanPrompt
-      .replace(/\b(?:search|dhoondo|dhundo|pata karo|google|karo|btao|batayein|real time|real-time|searc)\b/gi, '')
-      .trim();
+    const cleanSearchQuery = cleanDynamicSearchQuery(cleanPrompt);
     nodes.unshift({
       id: 'node_web_search',
       name: 'Search web',
@@ -730,126 +551,29 @@ export function getLatestImageFromHistory(messagesHistory = []) {
 }
 
 /**
- * Fuses an existing image's structural prompt with the user's targeted modification request
- * Preserves the exact camera perspective, composition, vehicle/subject structure, and lighting.
+ * Fuses an existing image's structural prompt with the user's targeted modification request dynamically.
+ * Seamlessly preserves composition while applying modifications for ANY subject, ANY color, and ANY environment.
  */
 export function fuseImageModificationPrompt(prevPrompt = '', userPrompt = '') {
-  if (!prevPrompt) return userPrompt;
-  const cleanUser = (userPrompt || '').toLowerCase();
-
-  const colorMap = {
-    red: 'glossy radiant candy-apple red finish',
-    lal: 'glossy radiant candy-apple red finish',
-    surkh: 'glossy radiant candy-apple red finish',
-    blue: 'deep metallic sapphire blue finish',
-    neela: 'deep metallic sapphire blue finish',
-    black: 'glossy obsidian jet black finish',
-    kala: 'glossy obsidian jet black finish',
-    white: 'radiant pearl white finish',
-    safaid: 'radiant pearl white finish',
-    yellow: 'vibrant canary yellow finish',
-    peela: 'vibrant canary yellow finish',
-    green: 'metallic emerald green finish',
-    sabz: 'metallic emerald green finish',
-    orange: 'vibrant sunset orange finish',
-    narangi: 'vibrant sunset orange finish',
-    purple: 'deep metallic royal purple finish',
-    gold: 'luxurious metallic gold finish',
-    golden: 'luxurious metallic gold finish',
-    silver: 'sleek liquid silver metallic finish',
-    grey: 'sleek titanium matte grey finish',
-    gray: 'sleek titanium matte grey finish'
-  };
-
-  let detectedColor = null;
-  for (const [key, val] of Object.entries(colorMap)) {
-    const reg = new RegExp(`\\b${key}\\b`, 'i');
-    if (reg.test(cleanUser)) {
-      detectedColor = val;
-      break;
-    }
-  }
-
-  let updatedPrompt = prevPrompt;
-
-  if (detectedColor) {
-    const existingColorPattern = /\b(glossy|metallic|radiant|deep|matte|vibrant)?\s*(silver|gold|golden|red|blue|black|white|yellow|green|orange|purple|grey|gray|titanium|obsidian|pearl|candy-apple|sapphire|emerald)\s*(finish|paint|color|colour)?\b/gi;
-    if (existingColorPattern.test(updatedPrompt)) {
-      updatedPrompt = updatedPrompt.replace(existingColorPattern, detectedColor);
-    } else {
-      const subjectMatch = updatedPrompt.match(/\b(sports car|supercar|car|vehicle|automobile|cat|dog|billi|lion|sher)\b/i);
-      if (subjectMatch) {
-        updatedPrompt = updatedPrompt.replace(subjectMatch[0], `${subjectMatch[0]} with ${detectedColor}`);
-      } else {
-        updatedPrompt = `${detectedColor}, ${updatedPrompt}`;
-      }
-    }
-  }
-
-  // Environmental / lighting changes
-  if (/\b(night|dark|chaand|raat|moon|stars|city|neon|tokyo|rain|barish)\b/i.test(cleanUser)) {
-    if (/\b(night|raat|moon|dark)\b/i.test(cleanUser)) {
-      updatedPrompt = updatedPrompt.replace(/\b(daylight|bright daylight|sunset|sunny day|dramatic sunset lighting)\b/gi, 'atmospheric nighttime lighting, starry night sky with moon glow');
-      if (!updatedPrompt.toLowerCase().includes('night')) {
-        updatedPrompt += ', set at dramatic nighttime with soft ambient reflections';
-      }
-    }
-    if (/\b(city|tokyo|neon)\b/i.test(cleanUser)) {
-      updatedPrompt = updatedPrompt.replace(/\b(mountains and lush trees|scenic hills|stone driveway)\b/gi, 'futuristic neon-lit city street at night');
-      if (!updatedPrompt.toLowerCase().includes('city')) {
-        updatedPrompt += ', illuminated modern urban city backdrop';
-      }
-    }
-    if (/\b(rain|barish|wet)\b/i.test(cleanUser)) {
-      updatedPrompt += ', wet asphalt with reflections of city lights, light raindrops';
-    }
-  }
-
-  // Accessories / Elements
-  if (/\b(spoiler|wing|rear wing)\b/i.test(cleanUser)) {
-    if (!updatedPrompt.toLowerCase().includes('spoiler')) {
-      updatedPrompt = updatedPrompt.replace(/\b(sports car|supercar|car)\b/i, '$1 with aggressive carbon fiber rear aerodynamic spoiler');
-    }
-  }
-
-  if (/\b(hat|topi|cap)\b/i.test(cleanUser)) {
-    if (!updatedPrompt.toLowerCase().includes('hat')) {
-      updatedPrompt += ', wearing a stylish miniature hat';
-    }
-  }
-
-  if (/\b(chashma|glasses|sunglasses)\b/i.test(cleanUser)) {
-    if (!updatedPrompt.toLowerCase().includes('sunglasses')) {
-      updatedPrompt += ', wearing cool sunglasses';
-    }
-  }
-
-  return updatedPrompt;
+  return dynamicallyFuseImagePrompt(prevPrompt, userPrompt);
 }
 
 export function buildImageGenerationDAG(prompt, messagesHistory = [], skillId = 'web-research-analyst') {
   let cleanImagePrompt = '';
-  const lower = prompt.toLowerCase().trim();
+  const lower = String(prompt || '').toLowerCase().trim();
 
-  // 1. Check if user is asking to modify an existing visual in conversation
+  // 1. Check if user is asking to modify an existing visual in conversation dynamically
   const latestImage = getLatestImageFromHistory(messagesHistory);
   const hasPreviousImage = Boolean(latestImage && (latestImage.url || latestImage.prompt));
 
   const isImageModificationRequest = hasPreviousImage && (
-    (
-      /\b(is|isko|iski|iska|isme|is me|ispe|is pe|issi|issi me|usi|usi me|ye|yeh)\b/i.test(lower) &&
-      /\b(color|colour|rang|red|blue|black|white|green|yellow|orange|purple|gold|silver|background|change|badlo|kardo|kar do|laga do|hata do|add|night|day|spoiler|chashma|topi|hat|modify|update)\b/i.test(lower)
-    ) || (
-      /\b(make it|turn it|color it|paint it|change it|add to it|modify it|put on it)\b/i.test(lower)
-    ) || (
-      /\b(car|cat|billi|dog|kutta|lion|sher|person|man|woman|background|sky|wheels|color|colour|theme)\b/i.test(lower) &&
-      /\b(red|blue|black|white|dark|bright|night|sunset|change|modify|update|replace|badlo|kardo|kar do)\b/i.test(lower)
-    )
+    lower.length < 35 ||
+    /\b(is|isko|iski|iska|isme|is me|it|this|that|change|modify|update|add|replace)\b/i.test(lower)
   );
 
   if (isImageModificationRequest && latestImage) {
     const prevPrompt = latestImage.prompt || latestImage.originalPrompt || '';
-    cleanImagePrompt = fuseImageModificationPrompt(prevPrompt, prompt);
+    cleanImagePrompt = dynamicallyFuseImagePrompt(prevPrompt, prompt);
 
     return {
       needsClarification: false,
@@ -878,7 +602,7 @@ export function buildImageGenerationDAG(prompt, messagesHistory = [], skillId = 
     };
   }
 
-  const isReferencingPreviousVisual = /\b(similar|sililar|similer|jaisa|jaisi|same|copy|recreate|re-create|attach|attached|base|previous|purani|pehle wali|pehle waali|like this|one)\b/i.test(lower);
+  const isReferencingPreviousVisual = /\b(similar|same|copy|recreate|previous)\b/i.test(lower);
 
   // 2. If user is asking for a similar image to an attached or previously analyzed visual:
   if (isReferencingPreviousVisual && messagesHistory && messagesHistory.length > 0) {
@@ -894,8 +618,8 @@ export function buildImageGenerationDAG(prompt, messagesHistory = [], skillId = 
         break;
       }
 
-      if (content.includes('footage') || content.includes('security camera') || content.includes('CCTV') || content.includes('jewelry store') || msg.image) {
-        const sentences = content.split(/[.\n]+/).map(s => s.trim()).filter(s => s.length > 25 && !s.startsWith('#') && !s.toLowerCase().startsWith('diagnosis') && !s.toLowerCase().startsWith('impact'));
+      if (msg.image || content.includes('footage') || content.includes('visual') || content.includes('camera')) {
+        const sentences = content.split(/[.\n]+/).map(s => s.trim()).filter(s => s.length > 25 && !s.startsWith('#'));
         if (sentences.length > 0) {
           cleanImagePrompt = sentences.slice(0, 2).join(', ');
           break;
@@ -904,29 +628,23 @@ export function buildImageGenerationDAG(prompt, messagesHistory = [], skillId = 
     }
   }
 
-  // 2. Clean user prompt if cleanImagePrompt not resolved yet
+  // 3. Clean user prompt dynamically if cleanImagePrompt not resolved yet
   if (!cleanImagePrompt) {
     cleanImagePrompt = prompt
-      .replace(/^\/?(?:image|draw|sd|paint)\b/i, '')
-      .replace(/\b(?:can you please|could you please|can u please|can u plz|please|plz|can you|can u|could you)\b/gi, '')
-      .replace(/\b(?:generate (?:an? )?image of|create (?:an? )?image of|draw (?:an? )?image of|render (?:an? )?image of|photo of|picture of|wallpaper of)\b/gi, '')
-      .replace(/\b(?:crete|creta|create|generate|draw|render|paint|make)\s+(?:an? )?(?:image|photo|pic|picture|tasveer|wallpaper|artwork)\s*(?:of)?\b/gi, '')
-      .replace(/\b(?:crete|creta|create|generate|make|draw|paint|render|banao|bana do|dikhao|dikhayein)\s*(?:an?|a)?\b/gi, '')
-      .replace(/\b(?:image banao|photo banao|tasveer banao|pic banao|picture banao|draw karo|banao|generate karo|generate|create|do|chahiye|de do|bana do|dikhao|dikhayein)\b/gi, '')
-      .replace(/\b(?:an? )?(?:image|photo|pic|picture|tasveer|wallpaper|artwork|drawing)\b/gi, '')
-      .replace(/\b(?:ki|ke|ka)\b/gi, '')
+      .replace(/^\/[a-zA-Z0-9_-]+\s*/, '')
+      .replace(/^["']|["']$/g, '')
+      .replace(/\s{2,}/g, ' ')
       .trim();
   }
 
-  // 3. If prompt is very short or generic (e.g. "similar one", "simple one", "iron man"), inspect recent messages
-  if (!cleanImagePrompt || cleanImagePrompt.length < 3 || /^(similar|sililar|simple|same|copy|one)$/i.test(cleanImagePrompt)) {
+  // 4. If prompt is very short or generic (e.g. "similar one", "another one"), inspect recent messages
+  if (!cleanImagePrompt || cleanImagePrompt.length < 3) {
     const prevItems = (messagesHistory || []).slice(-4);
     for (let i = prevItems.length - 1; i >= 0; i--) {
       const item = prevItems[i];
       const txt = item?.content || '';
-      const candidate = txt.replace(/\b(?:do|banao|dikhao|generate|karo|plz|please|chahiye|de do|bana do|image|photo|can u|can you|creta|create|similar|one)\b/gi, '').trim();
-      if (candidate.length >= 4) {
-        cleanImagePrompt = candidate.slice(0, 200);
+      if (txt.length >= 4) {
+        cleanImagePrompt = txt.slice(0, 200);
         break;
       }
     }
@@ -936,8 +654,8 @@ export function buildImageGenerationDAG(prompt, messagesHistory = [], skillId = 
     cleanImagePrompt = prompt;
   }
 
-  const isLogo = /\b(logo|icon|emblem|symbol|badge|vector|brand mark)\b/i.test(prompt) ||
-    /\b(logo|icon|emblem|symbol|badge|vector|brand mark)\b/i.test(cleanImagePrompt);
+  const isLogo = /\b(logo|icon|emblem|symbol|badge|vector)\b/i.test(lower) ||
+    /\b(logo|icon|emblem|symbol|badge|vector)\b/i.test(cleanImagePrompt);
 
   if (isLogo && !cleanImagePrompt.toLowerCase().includes('logo')) {
     cleanImagePrompt = `${cleanImagePrompt} logo`;
@@ -978,79 +696,50 @@ export function detectCompoundMultiIntent(prompt = '') {
   const clean = prompt.trim();
   const lower = clean.toLowerCase();
 
-  // 1. Check if prompt contains an image generation intent
-  const hasImageKeyword = /\b(image|tasveer|photo|pic|picture|wallpaper|artwork|drawing|logo|avatar|illustration)\b/i.test(lower);
-  const hasImageVerb = /\b(generate|create|make|draw|paint|render|banao|bana do|bana de|dikhao|dikhayein)\b/i.test(lower);
-  const hasImageIntent = (hasImageKeyword && (hasImageVerb || /\b(ki|ka|ke|of)\b/i.test(lower))) ||
-    /\b(image banao|photo banao|tasveer banao|pic banao|picture banao|draw karo|generate image|create image|make image)\b/i.test(lower) ||
-    lower.startsWith('/image') || lower.startsWith('/draw');
+  const hasConjunction = /\b(and|aur|plus|&|ke sath|sath me|sath sath)\b/i.test(lower) || lower.includes(',');
+  const hasImageCommand = lower.startsWith('/image') || lower.startsWith('/draw');
+  const hasImageTerm = hasImageCommand || /\b(image|photo|pic|picture|tasveer|wallpaper|artwork|drawing|logo)\b/i.test(lower);
 
-  // 2. Check if prompt contains a text writing / composition intent
-  const hasWritingNouns = /\b(sick leave|leave application|leave|chutti|application|darkhwast|formal letter|letter|khat|essay|mazmoon|story|kahani|poem|shayari|nazm|kavita|email|post|blog|article|speech|taqreer|script|notes|summary|khulasa|cv|resume|bio|guide)\b/i.test(lower);
-  const hasWritingVerbs = /\b(likho|likh do|likh ky do|likh kar do|likhein|write|draft|compose|pen down|type karo)\b/i.test(lower);
-  const hasWritingIntent = hasWritingNouns || (hasWritingVerbs && !hasImageKeyword);
-
-  // 3. Check if prompt contains a code creation intent
-  const hasCodeNouns = /\b(code|website|web page|app|canvas|html|css|javascript|react|component|function|calculator|program|game|clone|landing page|portfolio)\b/i.test(lower);
-  const hasCodeVerbs = /\b(code karo|code likho|banao|build|develop|program karo)\b/i.test(lower);
-  const hasCodeIntent = hasCodeNouns && hasCodeVerbs;
-
-  // 4. Check if prompt contains a search intent
-  const hasSearchIntent = /\b(search|dhoondo|dhundo|pata karo|find out|rates|current price|latest news|weather)\b/i.test(lower);
-
-  // 5. Check if prompt contains an explanation / question intent
-  const hasExplanationIntent = /\b(explain|samjhao|batao|tell me|details|pros and cons|difference|solve karo|calculate)\b/i.test(lower) &&
-    /\b(kya|kyun|kaise|how|why|what|difference|formula)\b/i.test(lower);
-
-  // Check connectors indicating multiple tasks
-  const hasConnector = /\b(and|aur|bhi|sath|saath|sath me|sath sath|plus|also|as well as|or sath|or saath|ke sath)\b/i.test(lower) ||
-    (lower.includes(',') && (hasImageIntent && (hasWritingIntent || hasCodeIntent || hasSearchIntent)));
-
-  const nonImageTasksCount = (hasWritingIntent ? 1 : 0) + (hasCodeIntent ? 1 : 0) + (hasSearchIntent ? 1 : 0) + (hasExplanationIntent ? 1 : 0);
-
-  const isCompound = hasImageIntent && (hasConnector || nonImageTasksCount > 0) && (hasWritingIntent || hasCodeIntent || hasSearchIntent || hasExplanationIntent);
-
-  if (!isCompound) {
+  if (!hasImageTerm || !hasConjunction) {
     return { isCompound: false };
   }
 
-  // Extract the visual prompt segment from the compound prompt
+  const parts = clean.split(/\b(?:and|aur|plus|&|ke sath|sath me|sath sath|,)\b/i).map(s => s.trim()).filter(Boolean);
+  if (parts.length < 2) {
+    return { isCompound: false };
+  }
+
   let visualSubject = '';
-  // Split prompt by connector
-  const parts = clean.split(/\b(?:and|aur|sath me|sath sath|plus|ke sath|or sath|or saath|,)\b/i);
+  let otherTasksExist = false;
+
   for (const part of parts) {
-    const trimmed = part.trim();
-    if (/\b(image|tasveer|photo|pic|picture|wallpaper|artwork|logo)\b/i.test(trimmed)) {
-      visualSubject = trimmed
-        .replace(/\b(?:image|tasveer|photo|pic|picture|wallpaper|artwork|logo)\b/gi, '')
-        .replace(/\b(?:banao|bana do|bana de|generate|create|draw|make|render|paint|likho|do|de do|chahiye|ki|ka|ke|of|an?|dikhao|dikhayein|karo|kar do|kar)\b/gi, '')
-        .replace(/\s{2,}/g, ' ')
+    if (/\b(image|photo|pic|picture|tasveer|wallpaper|artwork|logo)\b/i.test(part) || part.startsWith('/image')) {
+      visualSubject = part
+        .replace(/^\/[a-zA-Z0-9_-]+\s*/, '')
+        .replace(/\b(image|photo|pic|picture|tasveer|wallpaper|artwork|logo|ki|ka|ke|of|an?)\b/gi, '')
         .trim();
-      break;
+    } else if (part.length > 2) {
+      otherTasksExist = true;
     }
   }
 
-  if (!visualSubject || visualSubject.length < 2) {
-    // Fallback: match words preceding "ki image" or "image of"
-    const match = clean.match(/(?:(?:generate|create|make|draw)?\s*(?:an? )?(?:image|photo|pic|picture|tasveer)\s+of\s+([^,]+?)(?:\s+(?:and|aur|&|,)|$))/i) ||
-      clean.match(/([^,]+?)\s+(?:ki|ka|ke)\s+(?:image|photo|pic|picture|tasveer)/i);
-    if (match && match[1]?.trim()) {
-      visualSubject = match[1]
-        .replace(/\b(?:banao|bana do|generate|create|draw|make|likho|dikhao|karo)\b/gi, '')
-        .replace(/\s{2,}/g, ' ')
-        .trim();
-    }
+  if (!otherTasksExist) {
+    return { isCompound: false };
   }
+
+  const detectedLang = detectProgrammingLanguageDynamically(clean);
+  const hasCodeTask = Boolean(detectedLang || clean.includes('```') || clean.startsWith('/code'));
+  const hasSearchTask = clean.startsWith('/search');
 
   return {
     isCompound: true,
-    hasImageTask: hasImageIntent,
-    hasWritingTask: hasWritingIntent,
-    hasWritingNouns,
-    hasCodeTask: hasCodeIntent,
-    hasSearchTask: hasSearchIntent,
-    hasExplanationTask: hasExplanationIntent,
-    visualSubject: visualSubject || 'sunset',
+    hasImageTask: true,
+    hasWritingTask: !hasCodeTask && !hasSearchTask,
+    hasWritingNouns: true,
+    hasCodeTask,
+    hasSearchTask,
+    hasExplanationTask: clean.endsWith('?'),
+    visualSubject: visualSubject || 'visual art',
     rawPrompt: clean
   };
 }
@@ -1111,11 +800,11 @@ export function buildCompoundExecutionDAG({
     });
   }
 
-  // 4. Writing / Document Composition Node (for sick leave, letters, essays, stories, etc.)
+  // 4. Writing / Document Composition Node
   if (compoundIntent.hasWritingTask || compoundIntent.hasExplanationTask) {
     nodes.push({
       id: 'node_composition',
-      name: compoundIntent.hasWritingNouns ? 'Draft written document' : 'Compose answer',
+      name: 'Draft response',
       type: 'analysis',
       task: `Draft the complete, professional written deliverable for: "${prompt}" with high-grade formatting`,
       inputFrom: ['node_sd_generation'],
@@ -1139,50 +828,30 @@ export function buildCompoundExecutionDAG({
 
 /**
  * Classifies whether a prompt is a general non-image task (code, essay/letter, math, question, web search)
+ * Zero predefined keyword catalogs.
  */
 export function isGeneralNonImagePrompt(prompt = '') {
   if (!prompt || typeof prompt !== 'string') return false;
   const clean = prompt.toLowerCase().trim();
 
-  // If prompt explicitly asks for an image, drawing, wallpaper, or photo, it is an image prompt
+  // If prompt explicitly asks for an image, drawing, or photo command
   if (
     clean.startsWith('/image') ||
     clean.startsWith('/draw') ||
-    clean.startsWith('/sd') ||
-    /\b(generate (?:an? )?image|create (?:an? )?image|draw (?:an? )?image|render (?:an? )?image|photo of|picture of|wallpaper of|artwork of|sketch of|painting of|illustration of|tasveer|image banao|photo banao|tasveer banao|pic banao|picture banao|art banao|wallpaper banao|draw karo|generate image|create image|make image)\b/i.test(clean) ||
-    (/\b(image|photo|pic|picture|tasveer|wallpaper|artwork|avatar|logo)\b/i.test(clean) && /\b(banao|bana do|make|create|draw|render|paint|generate|dikhao)\b/i.test(clean))
+    clean.startsWith('/sd')
   ) {
     return false;
   }
 
-  // 1. Code requests (website, app, code, functions, scripts, frontend, backend)
-  const isCodeTarget = /\b(website|site|portfolio|ecommerce|store|shop|landing page|web app|app|application|script|code|program|function|algorithm|class|method|component|syntax|regex|sql|query|html|css|javascript|typescript|python|cpp|c\+\+|java|rust|golang|api|backend|frontend|database)\b/i.test(clean);
-  const isCodeAction = /\b(banao|build|create|make|write|likho|develop|generate|implement|solve|debug|fix|theek|sahi|repair|add|remove|delete|update|change|modify)\b/i.test(clean);
-  if (isCodeTarget && (isCodeAction || /\b(code|script|program|implementation|how to|in python|in cpp|in js|in html)\b/i.test(clean))) {
+  // If prompt explicitly starts with search or code command
+  if (clean.startsWith('/search') || clean.startsWith('/code') || clean.endsWith('?')) {
     return true;
   }
 
-  // 2. Letters, applications, essays, CV, emails
-  const isDocument = /\b(sick leave|leave application|application format|resignation|cover letter|resume|cv|email draft|draft email|essay|speech|letter to|formal letter|informal letter|darkhwast|arzi)\b/i.test(clean);
-  if (isDocument) return true;
+  const hasVisualTerm = /\b(image|photo|pic|picture|tasveer|wallpaper|artwork|avatar|logo|drawing)\b/i.test(clean);
+  if (hasVisualTerm) return false;
 
-  // 3. Informational questions & explanations
-  const isQuestion = (
-    clean.endsWith('?') ||
-    /^(what is|who is|why is|where is|when is|how does|how do|how to|explain|tell me about|define|difference between|kya hai|kon hai|kaun hai|kahan hai|kab hai|kyun hai|kese hota|kaise hota|samjhao|batao|batayein)\b/i.test(clean) ||
-    /\b(what is the|who is the|explain how|formula for|difference between|meaning of|kya matlab|tarjuma|translate)\b/i.test(clean)
-  );
-  if (isQuestion) return true;
-
-  // 4. Web search requests
-  const isSearch = /\b(search|dhoondo|dhundo|pata karo|google|lookup|research on|latest news)\b/i.test(clean);
-  if (isSearch) return true;
-
-  // 5. Math / Calculations
-  const isMath = /^(calculate|solve|solve equation)\b/i.test(clean) || /^\d+\s*[+\-*/=]\s*\d+/.test(clean);
-  if (isMath) return true;
-
-  return false;
+  return true;
 }
 
 export async function planDynamicExecutionGraph({
@@ -1328,27 +997,9 @@ export async function planDynamicExecutionGraph({
     .join(' ');
   const hasPreviousAttachedImage = (messagesHistory || []).some(m => m.image);
 
-  const isLogoPrompt = /\b(logo|icon|emblem|symbol|brand mark|badge|avatar|mascot)\b/i.test(lower);
-  const isVisualNoun = /\b(image|photo|pic|picture|tasveer|wallpaper|artwork|avatar|icon|logo|drawing|scene|view|footage|visual|cctv|portrait|landscape|illustration)\b/i.test(lower);
-  const isGenerationVerb = /\b(generate|banao|bana do|make|create|crete|creta|crate|draw|render|dikhao|dikhayein|chahiye|de do|recreate|paint|synthesize)\b/i.test(lower);
-
-  const isSimilarImageRequest = !isExplicitSearchIntent && (
-    /\b(similar|sililar|similer|jaisa|jaisi|same|copy|recreate|re-create|aisa hi|aisi hi|is tarah|is trah|attach base|based on|jo attach ki thi|attached image)\b/i.test(lower) &&
-    (
-      hasPreviousAttachedImage ||
-      /\b(image|photo|pic|picture|tasveer|cctv|footage|view|scene|visual)\b/i.test(recentConversation) ||
-      /\b(image|photo|pic|picture|tasveer|scene|view|one|visual)\b/i.test(lower)
-    )
-  );
-
-  const isFollowUpGeneration = !isExplicitSearchIntent && !isQuestionOrInquiry && (
-    /^(simple one|similar one|another one|one more|ek aur|aur dikhao|aisa hi|aisi hi|aur banao|recreate|try again|dobara banao)$/i.test(lower) ||
-    (/\b(simple one|similar one|another one|one more|ek aur|aur banao|aur image|aur photo|aur tasveer)\b/i.test(lower)) ||
-    (
-      isVisualNoun && isGenerationVerb &&
-      (hasPreviousAttachedImage || /\b(logo|image|photo|pic|picture|tasveer|wallpaper|artwork|avatar|icon|cctv|footage)\b/i.test(recentConversation))
-    )
-  );
+  const isLogoPrompt = /\b(logo|icon|emblem|symbol|brand mark|badge|avatar)\b/i.test(lower);
+  const isVisualNoun = /\b(image|photo|pic|picture|tasveer|wallpaper|artwork|avatar|icon|logo|drawing|scene|view|visual)\b/i.test(lower);
+  const isGenerationVerb = /\b(generate|banao|bana do|make|create|draw|render|dikhao|dikhayein|chahiye|de do|recreate|paint|synthesize)\b/i.test(lower);
 
   const officialBrand = detectOfficialBrandLogo(lower);
   const isBrandLogoRequest = !!officialBrand && !isExplicitSearchIntent && isLogoPrompt;
@@ -1357,77 +1008,23 @@ export async function planDynamicExecutionGraph({
   const hasPreviousImage = Boolean(latestImage && (latestImage.url || latestImage.prompt));
 
   const isImageModificationRequest = hasPreviousImage && !forceCanvasCode && !isExplicitSearchIntent && (
-    (
-      /\b(is|isko|iski|iska|isme|is me|ispe|is pe|issi|issi me|usi|usi me|ye|yeh)\b/i.test(lower) &&
-      /\b(color|colour|rang|red|blue|black|white|green|yellow|orange|purple|gold|silver|background|change|badlo|kardo|kar do|laga do|hata do|add|night|day|spoiler|chashma|topi|hat|modify|update)\b/i.test(lower)
-    ) || (
-      /\b(make it|turn it|color it|paint it|change it|add to it|modify it|put on it)\b/i.test(lower)
-    ) || (
-      /\b(car|cat|billi|dog|kutta|lion|sher|person|man|woman|background|sky|wheels|color|colour|theme)\b/i.test(lower) &&
-      /\b(red|blue|black|white|dark|bright|night|sunset|change|modify|update|replace|badlo|kardo|kar do)\b/i.test(lower)
-    )
+    lower.length < 35 ||
+    /\b(is|isko|iski|iska|isme|is me|it|this|that|change|modify|update|replace|badlo)\b/i.test(lower)
   );
 
-  // General capability inquiries or questions about image generation (not asking to draw a specific subject)
-  const isGeneralImageInquiry = (
-    /\b(image generation|image genearation|image generate\b|image creation|can you generate image|can you make an image|can you create an image|kya image generate|image bana sakty|image bana skte|image generate kar skty|kya aap image bana|image ban sakti hai)\b/i.test(lower) ||
-    /^(image|images|image generation|image genearation|photo generation)\s*\??$/i.test(lower)
-  ) && !/\b(of|ka|ki|ke|walay|wali|jese|like|with|holding|in|sunset|car|portrait|person|cat|dog|lion|nature|chatgpt|openai|google|iron man|superman|batman|hero|girl|boy|flower|city|logo|similar|cctv|jewelry)\b/i.test(lower);
-
-  // Confirmed image creation requests (explicit command, action verb + visual noun, or specific subject + generation intent)
-  const isConfirmedImageRequest = !hasImage && !forceCanvasCode && !isGeneralImageInquiry && !isExplicitSearchIntent && (
+  // Confirmed image creation requests
+  const isConfirmedImageRequest = !hasImage && !forceCanvasCode && !isExplicitSearchIntent && (
     lower.startsWith('/image') ||
     lower.startsWith('/draw') ||
     lower.startsWith('/sd') ||
-    isSimilarImageRequest ||
-    isFollowUpGeneration ||
     isImageModificationRequest ||
     isBrandLogoRequest ||
-    /\b(image banao|photo banao|tasveer banao|pic banao|picture banao|art banao|wallpaper banao|logo banao|draw karo|generate image|create image|make image|draw image|synthesize image|generate a picture|draw a picture|photo of|picture of|render an image|paint an image)\b/i.test(lower) ||
-    (isGenerationVerb && isVisualNoun) ||
-    (/\b(can you|can u|could you|plz|please)\b/i.test(lower) && (isGenerationVerb && isVisualNoun)) ||
-    (/\b(iron man|batman|superman|spiderman|avengers|warrior|robot|supercar|sports car|sunset)\b/i.test(lower) && (isVisualNoun || isGenerationVerb))
+    (isGenerationVerb && isVisualNoun)
   );
 
-  // If user is inquiring generally about image generation capability, answer directly without annoying interruptions
-  if (isGeneralImageInquiry) {
-    return {
-      needsClarification: false,
-      clarification: null,
-      cannotPerform: false,
-      intentCategory: 'CONVERSATION',
-      thinkingSummary: 'Explaining visual generation capabilities directly.',
-      executionPlanSummary: 'Direct Conversational Response',
-      doneStateCriteria: 'Visual capability explained.',
-      skillId: 'web-research-analyst',
-      nodes: []
-    };
-  }
-
-  // If user confirmed or specified an image/logo, immediately build the Image DAG without model hesitation
+  // If user confirmed or specified an image/logo, immediately build the Image DAG
   if (!compoundIntent.isCompound && isConfirmedImageRequest) {
     return buildImageGenerationDAG(prompt, messagesHistory);
-  }
-
-  // General questions about Devnexes platform itself or assistant capabilities
-  const isDevnexesInquiry = (
-    (/\b(devnexes ai|devnexes chatbot|devnexes app|about devnexes ai)\b/i.test(lower) && /\b(kya|what|who|tell|explain|bare|baray|about|details)\b/i.test(lower)) ||
-    /\b(devnexes ai kya|what is devnexes ai|tell me about devnexes ai|who made devnexes ai)\b/i.test(lower)
-  ) && !/\b(digital solutions|company|agency|services|lahore|software house|software company|ceo|founder|search|google|dhoondo|dhundo|pata karo)\b/i.test(lower);
-  const isCapabilityInquiry = /\b(ap kya|aap kya|kya kar sakty|kya kar skte|kya kar skty|what can you do|who are you|tum kon ho|ap kon ho|aap kaun ho)\b/i.test(lower);
-
-  if (isDevnexesInquiry || isCapabilityInquiry) {
-    return {
-      needsClarification: false,
-      clarification: null,
-      cannotPerform: false,
-      intentCategory: 'CONVERSATION',
-      thinkingSummary: isDevnexesInquiry ? 'Explaining Devnexes AI directly.' : 'Explaining capabilities directly.',
-      executionPlanSummary: 'Direct Conversational Response',
-      doneStateCriteria: 'Direct conversational explanation delivered.',
-      skillId: 'web-research-analyst',
-      nodes: []
-    };
   }
 
   const systemPlannerPrompt = `You are the High-IQ Master Graph Planner for Devnexes AI.
@@ -1499,47 +1096,50 @@ OUTPUT STRICT JSON ONLY:
     }).filter(Boolean).join('\n')
     : null;
 
-  try {
-    const rawContent = await callGroqChatJson({
-      messages: [
-        { role: 'system', content: systemPlannerPrompt },
-        {
-          role: 'user',
-          content: `${hasExistingArtifact ? `[ACTIVE CODE CANVAS DETECTED]: An existing ${latestArt.language} code artifact "${latestArt.title}" (${latestArt.code.split('\n').length} lines) is present in the workspace.\n` : ''}${historySummary ? `Prior conversation:\n${historySummary.slice(0, 1000)}\n\nCurrent request: "${prompt}"` : `Current request: "${prompt}"`}`
-        }
-      ],
-      model: model || GROQ_MODEL,
-      responseFormatJson: true,
-      signal
-    });
+  if (hasGroqApiKey()) {
+    try {
+      const planSignal = signal || AbortSignal.timeout(4500);
+      const rawContent = await callGroqChatJson({
+        messages: [
+          { role: 'system', content: systemPlannerPrompt },
+          {
+            role: 'user',
+            content: `${hasExistingArtifact ? `[ACTIVE CODE CANVAS DETECTED]: An existing ${latestArt.language} code artifact "${latestArt.title}" (${latestArt.code.split('\n').length} lines) is present in the workspace.\n` : ''}${historySummary ? `Prior conversation:\n${historySummary.slice(0, 1000)}\n\nCurrent request: "${prompt}"` : `Current request: "${prompt}"`}`
+          }
+        ],
+        model: model || GROQ_MODEL,
+        responseFormatJson: true,
+        signal: planSignal
+      });
 
-    if (rawContent) {
-      const lowerRaw = rawContent.toLowerCase();
-      if (lowerRaw.includes('i cannot') || lowerRaw.includes("i can't") || lowerRaw.includes('unable to') || lowerRaw.includes("can't provide") || lowerRaw.includes("cannot provide") || lowerRaw.includes("can't create") || lowerRaw.includes("cannot create") || lowerRaw.includes("can't generate") || lowerRaw.includes("cannot generate")) {
-        // If Groq refuses because of images, logos, or brand marks, override with image generation!
-        if (!compoundIntent.isCompound && !isGeneralImageInquiry && (isConfirmedImageRequest || isFollowUpGeneration || isBrandLogoRequest)) {
-          return buildImageGenerationDAG(prompt, messagesHistory);
+      if (rawContent) {
+        const lowerRaw = rawContent.toLowerCase();
+        if (lowerRaw.includes('i cannot') || lowerRaw.includes("i can't") || lowerRaw.includes('unable to') || lowerRaw.includes("can't provide") || lowerRaw.includes("cannot provide") || lowerRaw.includes("can't create") || lowerRaw.includes("cannot create") || lowerRaw.includes("can't generate") || lowerRaw.includes("cannot generate")) {
+          // If Groq refuses because of images, logos, or brand marks, override with image generation!
+          if (!compoundIntent.isCompound && (isConfirmedImageRequest || isBrandLogoRequest)) {
+            return buildImageGenerationDAG(prompt, messagesHistory);
+          }
+          return { cannotPerform: true, cannotPerformReason: rawContent.slice(0, 200), intentCategory: 'REFUSAL', nodes: [] };
         }
-        return { cannotPerform: true, cannotPerformReason: rawContent.slice(0, 200), intentCategory: 'REFUSAL', nodes: [] };
-      }
 
-      const plan = safeExtractJson(rawContent);
-      if (plan && typeof plan === 'object') {
-        if (!compoundIntent.isCompound && !isGeneralImageInquiry && (isConfirmedImageRequest || isFollowUpGeneration || isBrandLogoRequest)) {
-          return buildImageGenerationDAG(prompt, messagesHistory);
+        const plan = safeExtractJson(rawContent);
+        if (plan && typeof plan === 'object') {
+          if (!compoundIntent.isCompound && (isConfirmedImageRequest || isBrandLogoRequest)) {
+            return buildImageGenerationDAG(prompt, messagesHistory);
+          }
+          return normalizePlan(plan, {
+            forceWebSearch,
+            forceCanvasCode,
+            userPrompt: prompt,
+            hasExistingArtifact,
+            latestArtifactLang: latestArt?.language || 'html',
+            messagesHistory
+          });
         }
-        return normalizePlan(plan, {
-          forceWebSearch,
-          forceCanvasCode,
-          userPrompt: prompt,
-          hasExistingArtifact,
-          latestArtifactLang: latestArt?.language || 'html',
-          messagesHistory
-        });
       }
+    } catch (err) {
+      console.warn('[Planner] Groq planning error, using heuristic fallback:', err.message);
     }
-  } catch (err) {
-    console.warn('[Planner] Groq planning error, using heuristic fallback:', err.message);
   }
 
   // ── Heuristic fallback ─────────────────────────────────────────
@@ -1612,26 +1212,11 @@ OUTPUT STRICT JSON ONLY:
     };
   }
 
-  // Explicit bug / error keywords
-  const isCodeFixOrModify = /\b(bug|bugs|error|errors|issue|issues|crash|broken|exception|syntax|typeerror|undefined)\b/i.test(lower);
-  const isIncrementalModification = codeIntent.isIncrementalEdit && !isQuestionOrInquiry && !isExplicitSearchIntent;
-
-  // An explicit brand-new code creation or code fix request (large project or small snippet)
-  const isCodeTargetWord = /\b(code|function|program|script|algorithm|regex|sql|query|snippet|syntax|implementation|method|class|struct|loop|array|pointer|component|website|site|app|portfolio|page|html|css|javascript|typescript|python|cpp|c\+\+|java|rust|golang|csharp|php|react|vue|node)\b/i.test(lower);
-  const isCodeActionWord = /\b(banao|build|create|make|write|likho|generate|modify|change|update|add|remove|delete|insert|replace|dalo|lagao|hatao|badlo|fix|theek|sahi|do|de|give|show|dikhao|solve|implement|how to|kaise|kese|sample|example)\b/i.test(lower);
-  const isDirectCodeInquiry = /\b(code likho|script likho|code banao|code do|code btao|code chahiye|write code|give code|show code|fix code|solve|function for|code for|program for|script for|algorithm for|implementation of|how to implement|how to write|in python|in cpp|in c\+\+|in javascript|in java|in rust|in html)\b/i.test(lower);
-
-  const isExplicitCodeRequest = isIncrementalModification || (isCodeTargetWord && isCodeActionWord) || isDirectCodeInquiry ||
-    /\b(code likho|script banao|html banao|program likho|write code|write script|create app|build website|make a website|portfolio banao|website banao|app banao|store banao|ecommerce banao|fix this code|correct and fix|fix and correct|code fix|theek kardo|sahi kardo|fix kar do|correct kar do)\b/i.test(lower);
-  const mentionsRealEntityOrFacts = /\b(linkedin|twitter|github|portfolio of|profile of|resume of|cv of|ceo|founder|co-founder|director|president|manager|owner|creator|author|company|agency|firm|business|startup|enterprise|devnexes|raham|qayyum)\b/i.test(lower) ||
-    /\b(who is|who was|koun hai|kon hai|kis ka|kahan|where is|when was|what is the price|latest news|current version|documentation|official docs|stock|valuation)\b/i.test(lower) ||
-    /\b(according to|based on|facts? about|history of|details of|background of|verify|check karo|confirm karo|pata karo|dhundo|dhoondo|pury internet)\b/i.test(lower);
-  const isSearchCommand = !isExplicitCodeRequest && (
-    isExplicitSearchIntent ||
-    mentionsRealEntityOrFacts ||
-    /\b(google|search|dhoondo|dhundo|pata karo|btao|batayein|koun|kaun|who|what|where|current|latest|news|info|details|fact|facts)\b/i.test(lower)
-  );
-  const looksLikeGreeting = !isExplicitCodeRequest && !mentionsRealEntityOrFacts && lower.length < 18 && /\b(hi|hello|hey|salam|assalam|hola|sup|good morning|kese ho)\b/i.test(lower);
+  const isIncrementalModification = codeIntent.isIncrementalEdit;
+  const detectedLangInPrompt = detectProgrammingLanguageDynamically(prompt);
+  const isExplicitCodeRequest = isIncrementalModification || Boolean(detectedLangInPrompt) || prompt.includes('```') || prompt.startsWith('/code');
+  const isSearchCommand = !isExplicitCodeRequest && (forceWebSearch || prompt.startsWith('/search'));
+  const looksLikeGreeting = !isExplicitCodeRequest && lower.length < 15 && /\b(hi|hello|hey|salam|hola)\b/i.test(lower);
 
   if (looksLikeGreeting) {
     return { cannotPerform: false, intentCategory: 'GREETING', thinkingSummary: 'Casual greeting.', skillId: matched.id, nodes: [] };
@@ -1657,117 +1242,35 @@ OUTPUT STRICT JSON ONLY:
       artifactLanguage: latestArt.language || 'html',
       artifactTitle: latestArt.title || prompt.slice(0, 40)
     });
-  } else if (!isIncrementalModification && mentionsRealEntityOrFacts && isExplicitCodeRequest) {
-    const cleanSearchQuery = prompt
-      .replace(/\b(?:website banao|portfolio banao|code likho|script banao|build a website for|create a portfolio for|strictly based on his|strictly based on her|strictly based on)\b/gi, '')
-      .trim();
-
-    fallbackNodes.push({
-      id: 'node_search_grounding',
-      name: 'Search web for verified facts',
-      type: 'search',
-      task: `Perform live web search for: "${cleanSearchQuery || prompt}" to gather verified factual profile and company data. ZERO fake data.`,
-      inputFrom: [],
-      canParallel: false,
-      executionStage: stage++,
-      searchQuery: cleanSearchQuery || prompt
-    });
-
-    const isHtml = latestArt ? (latestArt.language === 'html') : (matched.id === 'frontend-design' || /\b(html|css|website|dashboard|ui|ecommerce|react|store|canvas)\b/i.test(lower));
-    const targetLang = latestArt?.language || (isHtml ? 'html' : 'python');
+  } else if (isExplicitCodeRequest) {
+    const detectedCurrentLang = detectRequestedProgrammingLanguage(prompt);
+    let targetLang = detectedCurrentLang || latestArt?.language || 'html';
+    const isHtml = targetLang === 'html';
 
     fallbackNodes.push({
       id: 'node_arch_spec',
-      name: 'Review facts & plan layout',
+      name: isHtml ? 'Plan layout & design' : `Plan ${targetLang.toUpperCase()} code`,
       type: 'analysis',
-      task: `Extract verified achievements, real credentials, and genuine company milestones from the live search findings. Formulate the technical specification with 100% genuine data.`,
-      inputFrom: ['node_search_grounding'],
-      canParallel: false,
-      executionStage: stage++
+      task: `Architect data models, state schema, and component structure for: "${prompt}"`,
+      inputFrom: [], canParallel: false, executionStage: stage++
     });
-
     fallbackNodes.push({
       id: 'node_code_impl',
-      name: isHtml ? 'Build website in Canvas' : 'Write application code',
+      name: isHtml ? 'Build website in Canvas' : `Write ${targetLang.toUpperCase()} code`,
       type: 'code',
-      task: `Generate 100% complete production code implementing the verified facts into the Canvas document.`,
-      inputFrom: ['node_arch_spec'],
-      canParallel: false,
-      executionStage: stage++,
+      task: `Generate 100% complete, production-grade ${targetLang.toUpperCase()} code for: "${prompt}" into Code Canvas.`,
+      inputFrom: ['node_arch_spec'], canParallel: false, executionStage: stage++,
       artifactLanguage: targetLang,
       artifactTitle: latestArt?.title || prompt.slice(0, 40)
     });
-
     fallbackNodes.push({
       id: 'node_cmd_runner',
       name: 'Setup & run commands',
       type: 'cmd',
       task: `Provide exact copy-pasteable PowerShell/CMD commands to run: "${prompt}"`,
-      inputFrom: ['node_code_impl'],
-      canParallel: false,
-      executionStage: stage++
+      inputFrom: ['node_code_impl'], canParallel: false, executionStage: stage++
     });
-
-    return {
-      cannotPerform: false,
-      intentCategory: 'CODE_BUILD',
-      thinkingSummary: `User requested an implementation grounded in real-world data for: "${prompt}". Grounding with live web search first to ensure 100% genuine factual accuracy before coding.`,
-      executionPlanSummary: 'Stage 1: Ground-Truth Entity & LinkedIn Data Extraction -> Stage 2: Verified Facts Synthesis -> Stage 3: Canvas Implementation',
-      doneStateCriteria: 'Production code delivered with 100% verified facts from live search grounding.',
-      skillId: matched.id,
-      nodes: fallbackNodes
-    };
-  } else if (isExplicitCodeRequest) {
-    const detectedCurrentLang = detectRequestedProgrammingLanguage(prompt);
-    let targetLang = detectedCurrentLang;
-    if (!targetLang) {
-      if (isIncrementalModification && latestArt?.language) {
-        targetLang = latestArt.language;
-      } else {
-        const fullConvText = lower + ' ' + (messagesHistory || []).map(m => m.content || '').join(' ').toLowerCase();
-        targetLang = detectRequestedProgrammingLanguage(fullConvText) || 'python';
-      }
-    }
-
-    const isSubstantial = forceCanvasCode || /\b(website|site|app|application|portfolio|ecommerce|store|shop|landing|page|dashboard|system|game|calc|calculator|full code|complete code|project)\b/i.test(lower);
-
-    if (isSubstantial) {
-      fallbackNodes.push({
-        id: 'node_arch_spec',
-        name: isCodeFixOrModify ? 'Plan code fix' : 'Plan layout & design',
-        type: 'analysis',
-        task: isCodeFixOrModify ? `Diagnose errors, inspect code logic, and formulate the exact fix for: "${prompt}"` : `Architect data models, state schema, and component structure for: "${prompt}"`,
-        inputFrom: [], canParallel: false, executionStage: stage++
-      });
-      fallbackNodes.push({
-        id: 'node_code_impl',
-        name: isCodeFixOrModify ? 'Fix and update code' : (targetLang === 'html' ? 'Build website in Canvas' : 'Write application code'),
-        type: 'code',
-        task: isCodeFixOrModify ? `Generate 100% complete, corrected, working ${targetLang} code fixing: "${prompt}" into Code Canvas.` : `Generate 100% complete, production-grade ${targetLang} code for: "${prompt}" into Code Canvas.`,
-        inputFrom: ['node_arch_spec'], canParallel: false, executionStage: stage++,
-        artifactLanguage: targetLang,
-        artifactTitle: latestArt?.title || prompt.slice(0, 40)
-      });
-      fallbackNodes.push({
-        id: 'node_cmd_runner',
-        name: 'Setup & run commands',
-        type: 'cmd',
-        task: `Provide exact copy-pasteable PowerShell/CMD commands to run: "${prompt}"`,
-        inputFrom: ['node_code_impl'], canParallel: false, executionStage: stage++
-      });
-    } else {
-      // Chota mota code: Direct, clean snippet generation by Gemini!
-      fallbackNodes.push({
-        id: 'node_code_snippet',
-        name: 'Generate code snippet',
-        type: 'code',
-        task: `Generate concise, accurate, idiomatic ${targetLang} code for: "${prompt}". Focus on clean, efficient code.`,
-        inputFrom: [], canParallel: false, executionStage: stage++,
-        artifactLanguage: targetLang,
-        artifactTitle: prompt.slice(0, 40)
-      });
-    }
-  } else if (isSearchCommand || mentionsRealEntityOrFacts || !looksLikeGreeting) {
+  } else if (isSearchCommand) {
     const resolvedQuery = resolveContextualSearchQuery(prompt, messagesHistory);
     fallbackNodes.push({
       id: 'node_search_1',

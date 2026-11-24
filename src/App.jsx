@@ -6,16 +6,22 @@ import ApiKeyModal from './components/ApiKeyModal';
 import ArtifactModal from './components/ArtifactModal';
 import IdeCodePanel from './components/IdeCodePanel';
 import ImageStudioView from './components/ImageStudioView';
-import { generateDynamicAgentPipeline, listLocalModels, AVAILABLE_MODELS, hasGroqApiKey } from './services/groqService';
+import MemoryStorageModal from './components/MemoryStorageModal';
+import RagSourcesModal from './components/RagSourcesModal';
+import { generateDynamicAgentPipeline, listLocalModels, AVAILABLE_MODELS, hasGroqApiKey, getGroqApiKeys } from './services/groqService';
 import { hasGeminiApiKey } from './services/geminiService';
 import { isGeneralNonImagePrompt } from './services/agentOrchestrator';
+import { clearConversationWorkspace } from './services/dynamicAgentEngine';
 import MarkdownRenderer from './components/MarkdownRenderer';
 import FollowUpActionCard from './components/FollowUpActionCard';
+import { isUrduOrHindi } from './utils/dynamicNLP';
+import { isGenericTitle, generateSmartTitleLocally, fetchSmartTitleFromAI } from './utils/conversationTitler';
 import {
   AlertCircle,
   BookOpen,
   PanelLeftOpen,
   ArrowDown,
+  ArrowRight,
   X,
   Copy,
   Check,
@@ -53,7 +59,9 @@ const createInitialConversation = () => ({
   title: 'New Chat',
   createdAt: Date.now(),
   updatedAt: Date.now(),
-  messages: []
+  messages: [],
+  workspace: null,
+  workspaceMeta: null
 });
 
 const DYNAMIC_GREETINGS = [
@@ -81,8 +89,13 @@ function isCodeSnippet(text = '') {
 
 function formatUserFacingError(err, userPrompt = '') {
   const msg = err?.message || String(err || '');
-  const isUrdu = /\b(kya|ha|hai|hain|karo|banao|mujhe|aap|ap|ye|yeh|kripya|chahiye|nahi|nhi)\b/i.test(userPrompt);
+  const isUrdu = isUrduOrHindi(userPrompt);
 
+  if (/invalid api key|invalid_api_key|401|no groq api key/i.test(msg)) {
+    return isUrdu
+      ? 'Groq API Key darust nahi hai ya configure nahi ki gayi. Kripya Settings (Key icon) me apni free Groq API key enter karein (console.groq.com/keys).'
+      : 'Groq API Key is invalid or not configured. Please set your free Groq API key in Settings (Key icon) or in your .env file.';
+  }
   if (/terms acceptance|model_terms_required|terms/i.test(msg)) {
     return isUrdu
       ? 'Chuna gaya model is waqt dastiyab nahi hai. Kripya doosra model chunein.'
@@ -141,8 +154,10 @@ export default function App() {
     if (saved) return saved === 'dark';
     return false; // Default to Light Theme as requested
   });
-  const [hasApiKey, setHasApiKey] = useState(() => hasGroqApiKey() && hasGeminiApiKey());
+  const [hasApiKey, setHasApiKey] = useState(() => hasGroqApiKey());
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
+  const [isMemoryModalOpen, setIsMemoryModalOpen] = useState(false);
+  const [selectedRagSources, setSelectedRagSources] = useState(null);
   const [agentTraceMode, setAgentTraceMode] = useState(false); // Default to Fast Chat as requested
   const [isWebSearchActive, setIsWebSearchActive] = useState(false);
   const [isCanvasCodeActive, setIsCanvasCodeActive] = useState(false);
@@ -360,6 +375,24 @@ export default function App() {
     });
   }, []);
 
+  // On mount: Auto-upgrade existing generic chat titles (e.g. multiple "hi"s) to smart descriptive titles
+  useEffect(() => {
+    let hasChanges = false;
+    const updated = conversations.map(c => {
+      if (!c.isCustomTitle && c.messages && c.messages.length > 0 && (isGenericTitle(c.title) || c.title?.length <= 4)) {
+        const smartTitle = generateSmartTitleLocally(c.messages);
+        if (smartTitle && smartTitle !== c.title && smartTitle !== 'New Chat') {
+          hasChanges = true;
+          return { ...c, title: smartTitle };
+        }
+      }
+      return c;
+    });
+    if (hasChanges) {
+      setConversations(updated);
+    }
+  }, []);
+
   // Sync activeId with loaded conversations
   useEffect(() => {
     if (!activeId || !conversations.some(c => c.id === activeId)) {
@@ -551,13 +584,53 @@ export default function App() {
 
   const activeConv = conversations.find(c => c.id === activeId) || conversations[0];
 
+  const autoTitleConversationIfGeneric = useCallback((convId) => {
+    if (!convId) return;
+
+    setConversations(prev => {
+      const conv = prev.find(c => c.id === convId);
+      if (!conv || !conv.messages || conv.messages.length === 0 || conv.isCustomTitle) return prev;
+
+      if (isGenericTitle(conv.title) || conv.title.length <= 4) {
+        const smartTitle = generateSmartTitleLocally(conv.messages);
+        if (smartTitle && smartTitle !== conv.title && smartTitle !== 'New Chat') {
+          return prev.map(c => c.id === convId ? { ...c, title: smartTitle, updatedAt: Date.now() } : c);
+        }
+      }
+      return prev;
+    });
+
+    // Non-blocking background AI title refinement if API key available
+    try {
+      const groqKey = getGroqApiKeys()?.[0] || localStorage.getItem('devnexes_groq_api_key') || localStorage.getItem('groq_api_key') || '';
+      const conv = conversationsRef.current.find(c => c.id === convId);
+      if (groqKey && conv && conv.messages && conv.messages.length > 0 && !conv.isCustomTitle) {
+        fetchSmartTitleFromAI(conv.messages, groqKey).then(aiTitle => {
+          if (aiTitle && aiTitle.length >= 3) {
+            setConversations(prev => prev.map(c => (c.id === convId && !c.isCustomTitle) ? { ...c, title: aiTitle, updatedAt: Date.now() } : c));
+          }
+        }).catch(() => { });
+      }
+    } catch { }
+  }, []);
+
   const handleSelectConv = useCallback((id) => {
+    // When switching/closing the previous conversation, auto-title it if generic
+    const prevActiveId = activeIdRef.current;
+    if (prevActiveId && prevActiveId !== id) {
+      autoTitleConversationIfGeneric(prevActiveId);
+    }
     setActiveView('chat');
     setActiveId(id);
     setActiveClarification(null);
-  }, []);
+  }, [autoTitleConversationIfGeneric]);
 
   const handleSelectView = useCallback((view) => {
+    // Auto-title previous conversation if needed
+    const prevActiveId = activeIdRef.current;
+    if (prevActiveId) {
+      autoTitleConversationIfGeneric(prevActiveId);
+    }
     setActiveView(view);
     if (view === 'images') {
       // "images vlay section am jab jauu to vo sara kam new chat ma ho"
@@ -572,9 +645,14 @@ export default function App() {
         setActiveId(newConv.id);
       }
     }
-  }, []);
+  }, [autoTitleConversationIfGeneric]);
 
   const handleNewChat = useCallback(() => {
+    // When leaving/closing active conversation, auto-title it if it was generic (e.g. "hi")
+    const prevActiveId = activeIdRef.current;
+    if (prevActiveId) {
+      autoTitleConversationIfGeneric(prevActiveId);
+    }
     setActiveView('chat');
     setViewSwitchNotice(null);
     setActiveClarification(null);
@@ -584,9 +662,10 @@ export default function App() {
     setConversations(prev => [newConv, ...prev]);
     setActiveId(newConv.id);
     setGreetingIndex(prev => (prev + 1) % DYNAMIC_GREETINGS.length);
-  }, []);
+  }, [autoTitleConversationIfGeneric]);
 
   const handleDeleteConv = useCallback((id) => {
+    clearConversationWorkspace(id);
     setConversations(prev => {
       if (prev.length <= 1) return prev;
       const remaining = prev.filter(c => c.id !== id);
@@ -598,10 +677,11 @@ export default function App() {
   const handleRenameConv = useCallback((id, newTitle) => {
     const trimmed = (newTitle || '').trim();
     if (!trimmed) return;
-    setConversations(prev => prev.map(c => c.id === id ? { ...c, title: trimmed, updatedAt: Date.now() } : c));
+    setConversations(prev => prev.map(c => c.id === id ? { ...c, title: trimmed, isCustomTitle: true, updatedAt: Date.now() } : c));
   }, []);
 
   const handleClearAllConvs = useCallback(() => {
+    conversationsRef.current.forEach(c => clearConversationWorkspace(c.id));
     const fresh = createInitialConversation();
     setConversations([fresh]);
     setActiveId(fresh.id);
@@ -654,7 +734,7 @@ export default function App() {
             localStorage.setItem('devnexes_canvas_language', lang);
           }
         } catch { }
-        setIdePanel(previous => ({ ...previous, code: cleaned, title: artifact.title || previous.title, language: lang }));
+        setIdePanel(previous => ({ ...previous, isOpen: true, code: cleaned, title: artifact.title || previous.title, language: lang }));
       }
 
       const imageStep = steps.find(step => (step.type === 'image' || step.imageResult) && step.imageResult?.url);
@@ -702,28 +782,67 @@ export default function App() {
         forceWebSearch: effectiveWebSearch,
         forceCanvasCode: effectiveCanvasCode,
         isFromImageStudio: Boolean(meta?.isFromImageStudio),
+        workspace: meta?.workspace || null,
+        workspaceMeta: meta?.workspaceMeta || null,
         activeCanvasCode,
         activeCanvasLanguage,
+        convId,
         signal: controller.signal,
         onStepUpdate: publishSteps,
         onError: error => { if (error.name !== 'AbortError') console.error(error); }
       });
       if (queuedUpdate) applyUpdate(queuedUpdate);
 
-      // Auto-open sidebar (Code Canvas) ONLY for substantial code (full apps, websites, or > 15 lines).
-      // Chota mota code (<= 15 lines) stays on the main screen without opening the sidebar!
-      const isSubstantial = pipelineResult?.isSubstantialCode || effectiveCanvasCode;
-      if (hasCode && isSubstantial) {
+      // Auto-open sidebar (Code Canvas) when code is produced so user sees it in canvas
+      if (hasCode || pipelineResult?.hasCode || pipelineResult?.artifact) {
         setIdePanel(previous => ({ ...previous, isOpen: true }));
       }
 
+      if (pipelineResult?.activeWorkspace) {
+        setConversations(previous => previous.map(conversation => conversation.id !== convId ? conversation : {
+          ...conversation,
+          workspace: pipelineResult.activeWorkspace
+        }));
+      }
+
+      if (pipelineResult?.retrievedMemories && pipelineResult.retrievedMemories.length > 0) {
+        setConversations(previous => previous.map(conversation => conversation.id !== convId ? conversation : {
+          ...conversation,
+          messages: conversation.messages.map(message => message.id !== assistantMsgId ? message : {
+            ...message,
+            retrievedMemories: pipelineResult.retrievedMemories
+          })
+        }));
+      }
+
+      if (pipelineResult?.ragSources && pipelineResult.ragSources.length > 0) {
+        setConversations(previous => previous.map(conversation => conversation.id !== convId ? conversation : {
+          ...conversation,
+          messages: conversation.messages.map(message => message.id !== assistantMsgId ? message : {
+            ...message,
+            ragSources: pipelineResult.ragSources
+          })
+        }));
+      }
+
       if (pipelineResult?.needsClarification && pipelineResult?.clarification) {
-        setActiveClarification(pipelineResult.clarification);
-        // Remove empty placeholder assistant message so NO question bubble appears in chat UI
+        const clar = pipelineResult.clarification;
+        const clarQuestions = clar.questions || (clar.question ? [{ question: clar.question, options: clar.options }] : []);
+        const questionText = clarQuestions.map(q => q.question).join('\n\n') || clar.question || 'Please choose an option to proceed:';
+
         setConversations(prev => prev.map(c => c.id !== convId ? c : {
           ...c,
-          messages: c.messages.filter(m => m.id !== assistantMsgId)
+          messages: c.messages.map(m => m.id !== assistantMsgId ? m : {
+            ...m,
+            role: 'assistant',
+            content: questionText,
+            clarification: clar,
+            isTrace: false,
+            retrievedMemories: pipelineResult.retrievedMemories || [],
+            ragSources: pipelineResult.ragSources || []
+          })
         }));
+        setActiveClarification(clar);
       } else {
         setActiveClarification(null);
       }
@@ -736,8 +855,11 @@ export default function App() {
       if (animationFrame !== null) cancelAnimationFrame(animationFrame);
       generationAbortRef.current = null;
       setIsLoading(false);
+      setTimeout(() => {
+        autoTitleConversationIfGeneric(convId);
+      }, 150);
     }
-  }, [isWebSearchActive, isCanvasCodeActive]);
+  }, [isWebSearchActive, isCanvasCodeActive, autoTitleConversationIfGeneric]);
 
   const handleStopGeneration = useCallback(() => generationAbortRef.current?.abort(), []);
 
@@ -766,19 +888,17 @@ export default function App() {
     const currentConv = conversationsRef.current.find(c => c.id === convId);
     const historyBeforeSend = currentConv ? currentConv.messages : [];
 
-    const isBranchAnswer = Boolean(
-      meta?.isClarificationAnswer ||
-      meta?.isFollowUpAnswer ||
-      currentClar ||
-      (historyBeforeSend.length > 0 && historyBeforeSend[historyBeforeSend.length - 1]?.role === 'user')
-    );
-    const questionText = meta?.question || currentClar?.question || null;
+    // Automatically retain and persist workspace / files across all turns in this chat!
+    const effectiveWorkspace = meta?.workspace || currentConv?.workspace || null;
+    const effectiveWorkspaceMeta = meta?.workspaceMeta || currentConv?.workspaceMeta || null;
 
     // Add user message with image attached if present
     setConversations(prev => prev.map(c => {
       if (c.id !== convId) return c;
       return {
         ...c,
+        workspace: effectiveWorkspace,
+        workspaceMeta: effectiveWorkspaceMeta,
         title: c.messages.length === 0 ? (userImage ? 'Image Analysis' : promptToSend.slice(0, 32)) : c.title,
         updatedAt: Date.now(),
         messages: [
@@ -787,16 +907,20 @@ export default function App() {
             id: userMsgId,
             role: 'user',
             content: promptToSend,
-            image: userImage,
-            isBranchAnswer,
-            questionText
+            image: userImage
           },
           { id: assistantMsgId, role: 'assistant', isTrace: true, content: '', traceData: { steps: [] } }
         ]
       };
     }));
 
-    await executeGeneration(promptToSend, userImage, historyBeforeSend, assistantMsgId, convId, meta);
+    const enrichedMeta = {
+      ...meta,
+      workspace: effectiveWorkspace,
+      workspaceMeta: effectiveWorkspaceMeta
+    };
+
+    await executeGeneration(promptToSend, userImage, historyBeforeSend, assistantMsgId, convId, enrichedMeta);
   }, [executeGeneration, scrollToLatestPrompt]);
 
   const handleGenerateFromImageStudio = useCallback((prompt) => {
@@ -916,6 +1040,7 @@ export default function App() {
         onClearAllConvs={handleClearAllConvs}
         hasApiKey={hasApiKey}
         onOpenApiKeyModal={handleOpenApiKeyModal}
+        onOpenMemoryModal={() => setIsMemoryModalOpen(true)}
         isDarkMode={isDarkMode}
         onToggleTheme={handleToggleTheme}
         isCollapsed={isSidebarCollapsed}
@@ -941,7 +1066,7 @@ export default function App() {
         >
 
           {/* Header (Fully Transparent & Borderless Header Bar) */}
-          <header className="h-11 sm:h-12 px-3.5 sm:px-4 flex items-center justify-between shrink-0 z-10 bg-transparent transition-all duration-300 relative select-none">
+          <header className="h-11 sm:h-12 px-4 sm:px-6 flex items-center justify-between shrink-0 z-10 bg-transparent transition-all duration-300 relative select-none">
             {/* Left: Mobile sidebar toggle + Conversation title */}
             <div className="flex items-center space-x-2 truncate pr-2">
               <button
@@ -988,6 +1113,18 @@ export default function App() {
                   <span className="hidden sm:inline">Set API Key</span>
                 </button>
               )}
+
+              {/* Memory Storage / Knowledge Base Button (RAG) */}
+              <button
+                onClick={() => setIsMemoryModalOpen(true)}
+                className={`p-1.5 rounded-lg transition-all duration-200 cursor-pointer ${isDarkMode
+                  ? 'text-slate-300 hover:text-white hover:bg-slate-800/80'
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
+                  }`}
+                title="Memory Storage & Knowledge Base (RAG)"
+              >
+                <Brain size={15} className="text-purple-500" />
+              </button>
 
               {/* Book Icon Button for Code Canvas / Workspace */}
               <button
@@ -1043,7 +1180,7 @@ export default function App() {
                 className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar flex flex-col w-full max-w-full"
               >
                 {activeConv && activeConv.messages.length > 0 ? (
-                  <div className="messages-wrapper max-w-[700px] sm:max-w-[750px] md:max-w-[800px] lg:max-w-[820px] w-full mx-auto px-4 sm:px-5 md:px-6 py-4 sm:py-8 space-y-5 sm:space-y-7 flex-1 min-h-full">
+                  <div className="messages-wrapper max-w-[720px] sm:max-w-[760px] md:max-w-[820px] lg:max-w-[840px] w-full mx-auto px-5 sm:px-5 md:px-6 py-2 sm:py-3.5 space-y-3 sm:space-y-4 flex-1 min-h-full">
                     {activeConv.messages.map((msg, msgIdx) => {
                       const isLastUser = msg.role === 'user' && (
                         msgIdx === activeConv.messages.length - 1 ||
@@ -1057,122 +1194,91 @@ export default function App() {
                           className={`animate-bubble-in w-full max-w-full overflow-visible ${isLastUser ? 'scroll-mt-14 sm:scroll-mt-16' : ''}`}
                         >
 
-                          {msg.role === 'user' ? (() => {
-                            const isConsecutiveUser = msgIdx > 0 && activeConv.messages[msgIdx - 1]?.role === 'user';
-                            const isBranch = Boolean(msg.isBranchAnswer || msg.isClarificationAnswer || msg.isFollowUpAnswer || isConsecutiveUser);
-                            const questionLabel = msg.questionText || (isConsecutiveUser ? 'Option selected' : 'Clarification answer');
-
-                            return (
-                              /* User message — right aligned reference bubble with branch root when connected */
-                              <div className="relative flex flex-col items-end w-full max-w-full space-y-1.5">
-                                {/* Branch Root Indicator & Tree Line connecting from above */}
-                                {isBranch && (
-                                  <div className="relative w-full flex items-center justify-end pr-3 sm:pr-4 mt-1 mb-1 select-none animate-step-reveal">
-                                    <div className="flex items-center space-x-1.5 text-blue-600 dark:text-blue-400 bg-blue-50/90 dark:bg-blue-950/70 px-2.5 py-0.5 rounded-full border border-blue-200/80 dark:border-blue-900/60 shadow-2xs">
-                                      {/* Branch Elbow Curve */}
-                                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="text-blue-500 dark:text-blue-400 shrink-0">
-                                        <path
-                                          d="M 3 1 V 8 Q 3 13 8 13 H 14"
-                                          stroke="currentColor"
-                                          strokeWidth="2"
-                                          strokeLinecap="round"
-                                        />
-                                      </svg>
-                                      <span className="w-1.5 h-1.5 rounded-full bg-[#0066FF] dark:bg-blue-400 shrink-0" />
-                                      <span className="text-[10px] sm:text-[10.5px] font-semibold tracking-tight text-blue-600 dark:text-blue-300 truncate max-w-[220px] sm:max-w-xs" title={msg.questionText || 'Answer to clarification question'}>
-                                        ↳ {questionLabel}
-                                      </span>
-                                    </div>
+                          {msg.role === 'user' ? (
+                            /* User message — clean, modern right-aligned bubble (Zero weird branches/borders) */
+                            <div className="relative flex flex-col items-end w-full max-w-full space-y-1.5">
+                              {editingMsgId === msg.id ? (
+                                /* Inline Edit Form */
+                                <div className={`w-full max-w-[90%] sm:max-w-2xl p-3.5 sm:p-4 rounded-2xl border shadow-sm ${isDarkMode ? 'bg-[#121626] border-blue-500/70' : 'bg-white border-blue-400'
+                                  }`}>
+                                  <textarea
+                                    value={editingText}
+                                    onChange={(e) => setEditingText(e.target.value)}
+                                    rows={Math.max(2, Math.min(editingText.split('\n').length, 6))}
+                                    autoFocus
+                                    className={`w-full bg-transparent border-0 focus:outline-none text-[15.5px] sm:text-[17px] leading-relaxed resize-none ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}
+                                  />
+                                  <div className="flex items-center justify-end space-x-2 pt-2.5 mt-1 border-t border-slate-200/60 dark:border-slate-800">
+                                    <button
+                                      type="button"
+                                      onClick={handleCancelEdit}
+                                      className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveEdit(msg.id, editingText, msg.image)}
+                                      disabled={!editingText.trim() || isLoading}
+                                      className="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium bg-[#0066FF] hover:bg-blue-600 active:scale-95 text-white shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                                    >
+                                      Save
+                                    </button>
                                   </div>
-                                )}
-
-                                {editingMsgId === msg.id ? (
-                                  /* Inline Edit Form */
-                                  <div className={`w-full max-w-[90%] sm:max-w-2xl p-3.5 sm:p-4 rounded-2xl border shadow-sm ${isBranch ? 'mr-3 sm:mr-5' : ''
-                                    } ${isDarkMode ? 'bg-[#121626] border-blue-500/70' : 'bg-white border-blue-400'}`}>
-                                    <textarea
-                                      value={editingText}
-                                      onChange={(e) => setEditingText(e.target.value)}
-                                      rows={Math.max(2, Math.min(editingText.split('\n').length, 6))}
-                                      autoFocus
-                                      className={`w-full bg-transparent border-0 focus:outline-none text-[15.5px] sm:text-[17px] leading-relaxed resize-none ${isDarkMode ? 'text-slate-100' : 'text-slate-900'}`}
-                                    />
-                                    <div className="flex items-center justify-end space-x-2 pt-2.5 mt-1 border-t border-slate-200/60 dark:border-slate-800">
-                                      <button
-                                        type="button"
-                                        onClick={handleCancelEdit}
-                                        className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                                </div>
+                              ) : (
+                                <>
+                                  <div className={`max-w-[88%] sm:max-w-2xl px-4 sm:px-5 py-3 sm:py-3.5 rounded-2xl rounded-tr-xs shadow-2xs break-words ${isDarkMode ? 'bg-[#121626] text-slate-100 border border-slate-800/80' : 'bg-slate-100 text-slate-900 border border-slate-200/60'
+                                    }`}>
+                                    {msg.image && typeof msg.image === 'string' && !msg.image.endsWith('...') && (
+                                      <div
+                                        onClick={() => setSelectedImageModal({ isOpen: true, url: msg.image })}
+                                        className="mb-2.5 max-w-xs sm:max-w-sm rounded-xl overflow-hidden border border-slate-300/80 dark:border-slate-700/80 bg-slate-900/10 dark:bg-black/40 cursor-pointer group relative"
+                                        title="Click to zoom image"
                                       >
-                                        Cancel
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleSaveEdit(msg.id, editingText, msg.image)}
-                                        disabled={!editingText.trim() || isLoading}
-                                        className="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium bg-[#0066FF] hover:bg-blue-600 active:scale-95 text-white shadow-xs transition-all cursor-pointer disabled:opacity-50"
-                                      >
-                                        Save
-                                      </button>
-                                    </div>
+                                        <img src={msg.image} alt="User attachment" className="max-h-60 w-auto object-contain rounded-lg group-hover:scale-[1.02] transition-transform duration-200" />
+                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center transition-colors">
+                                          <span className="opacity-0 group-hover:opacity-100 px-2 py-0.5 rounded-md bg-black/70 text-white text-[11px] font-medium transition-opacity">Zoom</span>
+                                        </div>
+                                      </div>
+                                    )}
+                                    {msg.content?.includes('```') ? (
+                                      <MarkdownRenderer
+                                        content={msg.content}
+                                        onOpenIdePanel={handleOpenIdePanel}
+                                      />
+                                    ) : (
+                                      <div className={`whitespace-pre-wrap break-words leading-relaxed ${isCodeSnippet(msg.content)
+                                        ? 'font-mono text-[13.5px] sm:text-[14px]'
+                                        : 'font-sans text-[15.5px] sm:text-[16px] font-medium'
+                                        }`}>
+                                        {msg.content}
+                                      </div>
+                                    )}
                                   </div>
-                                ) : (
-                                  <>
-                                    <div className={`max-w-[90%] sm:max-w-2xl px-5 sm:px-6 py-3 sm:py-3.5 rounded-2xl shadow-2xs break-words ${isBranch
-                                        ? 'mr-3 sm:mr-5 rounded-tr-xl rounded-tl-sm border-l-3 border-l-[#0066FF] dark:border-l-blue-400'
-                                        : 'rounded-tr-xs'
-                                      } ${isDarkMode ? 'bg-[#121626] text-slate-100 border border-slate-800/80' : 'bg-slate-100 text-slate-900 border border-slate-200/60'
-                                      }`}>
-                                      {msg.image && typeof msg.image === 'string' && !msg.image.endsWith('...') && (
-                                        <div
-                                          onClick={() => setSelectedImageModal({ isOpen: true, url: msg.image })}
-                                          className="mb-2.5 max-w-xs sm:max-w-sm rounded-xl overflow-hidden border border-slate-300/80 dark:border-slate-700/80 bg-slate-900/10 dark:bg-black/40 cursor-pointer group relative"
-                                          title="Click to zoom image"
-                                        >
-                                          <img src={msg.image} alt="User attachment" className="max-h-60 w-auto object-contain rounded-lg group-hover:scale-[1.02] transition-transform duration-200" />
-                                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 flex items-center justify-center transition-colors">
-                                            <span className="opacity-0 group-hover:opacity-100 px-2 py-0.5 rounded-md bg-black/70 text-white text-[11px] font-medium transition-opacity">Zoom</span>
-                                          </div>
-                                        </div>
-                                      )}
-                                      {msg.content?.includes('```') ? (
-                                        <MarkdownRenderer
-                                          content={msg.content}
-                                          onOpenIdePanel={handleOpenIdePanel}
-                                        />
-                                      ) : (
-                                        <div className={`whitespace-pre-wrap break-words leading-relaxed ${isCodeSnippet(msg.content)
-                                            ? 'font-mono text-[13.5px] sm:text-[14px]'
-                                            : 'font-sans text-[16.5px] sm:text-[17px] font-medium'
-                                          }`}>
-                                          {msg.content}
-                                        </div>
-                                      )}
-                                    </div>
 
-                                    {/* User Action bar: Edit + Copy */}
-                                    <div className={`flex items-center space-x-1.5 text-slate-400 dark:text-slate-400 px-1 opacity-70 hover:opacity-100 transition-opacity select-none ${isBranch ? 'mr-3 sm:mr-5' : ''
-                                      }`}>
-                                      <button
-                                        onClick={() => handleStartEdit(msg)}
-                                        disabled={isLoading}
-                                        className="hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800/80 disabled:opacity-50"
-                                        title="Edit message"
-                                      >
-                                        <Pencil size={13} />
-                                      </button>
-                                      <button
-                                        onClick={() => handleCopyMessage(msg.id, msg.content)}
-                                        className="hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800/80"
-                                        title="Copy text"
-                                      >
-                                        {copiedMsgId === msg.id ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
-                                      </button>
-                                    </div>
-                                  </>
-                                )}
-                              </div>
-                            );
-                          })() : (() => {
+                                  {/* User Action bar: Edit + Copy */}
+                                  <div className="flex items-center space-x-1.5 text-slate-400 dark:text-slate-400 px-1 opacity-70 hover:opacity-100 transition-opacity select-none">
+                                    <button
+                                      onClick={() => handleStartEdit(msg)}
+                                      disabled={isLoading}
+                                      className="hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800/80 disabled:opacity-50"
+                                      title="Edit message"
+                                    >
+                                      <Pencil size={13} />
+                                    </button>
+                                    <button
+                                      onClick={() => handleCopyMessage(msg.id, msg.content)}
+                                      className="hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800/80"
+                                      title="Copy text"
+                                    >
+                                      {copiedMsgId === msg.id ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
+                                    </button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          ) : (() => {
                             const hasSubsequentFix = activeConv.messages.slice(msgIdx + 1).some(m =>
                               (m.role === 'assistant' && (
                                 m.traceData?.steps?.some(s => (s.type === 'code' || s.type === 'artifact') && s.code) ||
@@ -1182,10 +1288,62 @@ export default function App() {
                             );
 
                             return (
-                              /* AI message — clean response + reference action toolbar */
+                              /* AI message — with Devnexes AI branding badge + clean response or interactive clarification */
                               <div className="w-full max-w-full overflow-hidden space-y-2">
-                                <div className="w-full max-w-full overflow-hidden">
-                                  {msg.isTrace ? (
+                                {/* Devnexes AI Brand Identity Header (Left-aligned sender label) */}
+                                <div className="flex items-center space-x-2 select-none mb-1">
+                                  <img
+                                    src="/devnexes-logo.png"
+                                    alt="Devnexes AI"
+                                    className="w-5 h-5 rounded-md object-contain shrink-0"
+                                  />
+                                  <span className="font-semibold text-xs sm:text-[13px] text-slate-800 dark:text-slate-200 tracking-tight">
+                                    Devnexes AI
+                                  </span>
+                                  {msg.clarification && (
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 dark:bg-blue-950/80 text-[#0066FF] dark:text-blue-400">
+                                      Clarification
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Content Area */}
+                                <div className="w-full max-w-full overflow-hidden pl-0 sm:pl-1">
+                                  {msg.clarification ? (
+                                    /* Interactive Clarification Card inside the Assistant Message */
+                                    <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#0f1424] border border-blue-200/90 dark:border-blue-900/60 shadow-sm space-y-3.5">
+                                      <div className="text-[15.5px] sm:text-[16px] font-medium text-slate-800 dark:text-slate-100 leading-relaxed whitespace-pre-wrap">
+                                        {msg.content || msg.clarification.question || 'Please select an option to proceed:'}
+                                      </div>
+
+                                      {Array.isArray(msg.clarification.options) && msg.clarification.options.length > 0 && (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                                          {msg.clarification.options.map((opt, optIdx) => (
+                                            <button
+                                              key={optIdx}
+                                              type="button"
+                                              disabled={isLoading}
+                                              onClick={() => {
+                                                handleSendMessage(opt, null, {
+                                                  isClarificationAnswer: true,
+                                                  question: msg.clarification.question,
+                                                  optionIndex: optIdx
+                                                });
+                                              }}
+                                              className="flex items-center space-x-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 hover:bg-blue-50/70 dark:hover:bg-blue-950/40 hover:border-blue-400 dark:hover:border-blue-700 text-left transition-all cursor-pointer group shadow-2xs active:scale-[0.99] disabled:opacity-50"
+                                            >
+                                              <span className="w-6 h-6 rounded-lg bg-blue-100 dark:bg-blue-950 text-[#0066FF] dark:text-blue-400 text-xs font-bold flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                                                {String.fromCharCode(65 + optIdx)}
+                                              </span>
+                                              <span className="text-xs sm:text-[13px] font-medium text-slate-800 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-300">
+                                                {opt}
+                                              </span>
+                                            </button>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : msg.isTrace ? (
                                     <AgentTraceTree
                                       traceData={msg.traceData}
                                       userPrompt={msgIdx > 0 ? activeConv.messages[msgIdx - 1]?.content : ''}
@@ -1216,32 +1374,56 @@ export default function App() {
                                   )}
                                 </div>
 
-                              {/* AI Response Action Toolbar: Copy + Regenerate ONLY */}
-                              {(!msg.isTrace || !isLoading) && (
-                                <div className="flex items-center space-x-1.5 text-slate-400 dark:text-slate-400 pt-1 select-none">
-                                  {/* Copy */}
-                                  <button
-                                    onClick={() => handleCopyMessage(msg.id, msg.content || msg.traceData?.steps?.find(s => s.type === 'response')?.content || '')}
-                                    className="hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800/80"
-                                    title="Copy response"
-                                  >
-                                    {copiedMsgId === msg.id ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                                  </button>
+                                {/* AI Response Action Toolbar: Copy + Regenerate ONLY */}
+                                {(!msg.isTrace || !isLoading) && (
+                                  <div className="flex items-center space-x-2 text-slate-400 dark:text-slate-400 pt-1 select-none">
+                                    {/* Copy */}
+                                    <button
+                                      onClick={() => handleCopyMessage(msg.id, msg.content || msg.traceData?.steps?.find(s => s.type === 'response')?.content || '')}
+                                      className="hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800/80"
+                                      title="Copy response"
+                                    >
+                                      {copiedMsgId === msg.id ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                                    </button>
 
-                                  {/* Regenerate */}
-                                  <button
-                                    onClick={() => handleRegenerateFromAssistant(msg.id)}
-                                    disabled={isLoading}
-                                    className="hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800/80 disabled:opacity-50"
-                                    title="Regenerate response"
-                                  >
-                                    <RotateCcw size={14} />
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
+                                    {/* Regenerate */}
+                                    <button
+                                      onClick={() => handleRegenerateFromAssistant(msg.id)}
+                                      disabled={isLoading}
+                                      className="hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800/80 disabled:opacity-50"
+                                      title="Regenerate response"
+                                    >
+                                      <RotateCcw size={14} />
+                                    </button>
+
+                                    {/* Recalled Memory Pill */}
+                                    {Array.isArray(msg.retrievedMemories) && msg.retrievedMemories.length > 0 && (
+                                      <button
+                                        onClick={() => setIsMemoryModalOpen(true)}
+                                        className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-medium bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-800/60 hover:bg-purple-100 dark:hover:bg-purple-900/60 transition-colors cursor-pointer"
+                                        title={msg.retrievedMemories.map(m => `• [${m.category}] ${m.title}: ${m.content}`).join('\n')}
+                                      >
+                                        <Brain size={11} className="text-purple-500" />
+                                        <span>{msg.retrievedMemories.length} rules applied</span>
+                                      </button>
+                                    )}
+
+                                    {/* RAG Sources Pill */}
+                                    {Array.isArray(msg.ragSources) && msg.ragSources.length > 0 && (
+                                      <button
+                                        onClick={() => setSelectedRagSources(msg.ragSources)}
+                                        className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-medium bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors cursor-pointer"
+                                        title={msg.ragSources.map(s => `• ${s.filePath} (Lines ${s.lineStart}-${s.lineEnd}) [${s.relevancePercent || 90}% match]`).join('\n')}
+                                      >
+                                        <BookOpen size={11} className="text-emerald-500" />
+                                        <span>{msg.ragSources.length} RAG sources</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
 
                         </div>
                       )
@@ -1286,16 +1468,16 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Generous bottom breathing spacer so latest prompt & response scroll comfortably up with space below */}
+                    {/* Comfortable bottom breathing spacer so latest prompt & response scroll cleanly with room */}
                     <div
                       ref={messagesEndRef}
-                      className="h-[36vh] sm:h-[44vh] w-full shrink-0 pointer-events-none select-none transition-all duration-300"
+                      className="h-28 sm:h-36 w-full shrink-0 pointer-events-none select-none transition-all duration-300"
                       aria-hidden="true"
                     />
                   </div>
                 ) : (
-                  /* Welcome / clean empty state perfectly balanced in upper-middle */
-                  <div className="flex-1 flex flex-col items-center justify-start pt-[8vh] sm:pt-[14vh] px-4 sm:px-6 pb-6 select-none">
+                  /* Welcome / clean empty state with content in upper-middle and disclaimer at the very bottom */
+                  <div className="flex-1 flex flex-col items-center justify-between pt-[6vh] sm:pt-[12vh] px-4 sm:px-6 pb-2 select-none min-h-full">
                     <div className="w-full max-w-[700px] sm:max-w-[750px] md:max-w-[800px] lg:max-w-[820px] mx-auto space-y-3.5 sm:space-y-5 animate-fade-in">
 
                       {/* Clean elegant typography heading matching reference */}
@@ -1323,6 +1505,7 @@ export default function App() {
                           onToggleWebSearch={handleToggleWebSearch}
                           isCanvasCodeActive={isCanvasCodeActive}
                           onToggleCanvasCode={handleToggleCanvasCode}
+                          hideDisclaimer={true}
                         />
                       </div>
 
@@ -1336,7 +1519,7 @@ export default function App() {
                               currentMobileCap.id === 'canvasCode' ? isCanvasCodeActive : false;
 
                         return (
-                          <div className="flex sm:hidden items-center justify-between w-full px-3.5 pt-2.5 select-none animate-fade-in">
+                          <div className="flex sm:hidden items-center justify-between w-full px-3.5 pt-2 select-none animate-fade-in">
                             {/* Left: Brand with Devnexes Logo */}
                             <div className="flex items-center space-x-2 text-[13px] font-semibold text-slate-800 dark:text-slate-200">
                               <img
@@ -1357,20 +1540,19 @@ export default function App() {
                                 type="button"
                                 onClick={handleToggleCurrentMobileCap}
                                 className={`relative overflow-hidden inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-full border text-xs sm:text-[12.5px] font-medium transition-all duration-300 cursor-pointer shadow-2xs active:scale-95 ${isActive
-                                    ? 'bg-blue-50 dark:bg-blue-950/70 border-[#0066FF] text-[#0066FF] dark:text-blue-400 font-semibold ring-1 ring-blue-500/20'
-                                    : isDarkMode
-                                      ? 'bg-[#121626]/90 border-slate-700/80 text-slate-300 hover:text-white'
-                                      : 'bg-white border-slate-200/90 text-slate-600 hover:text-slate-900'
+                                  ? 'bg-blue-50 dark:bg-blue-950/70 border-[#0066FF] text-[#0066FF] dark:text-blue-400 font-semibold ring-1 ring-blue-500/20'
+                                  : isDarkMode
+                                    ? 'bg-[#121626]/90 border-slate-700/80 text-slate-300 hover:text-white'
+                                    : 'bg-white border-slate-200/90 text-slate-600 hover:text-slate-900'
                                   }`}
                                 title={`Tap to ${isActive ? 'deactivate' : 'activate'} ${currentMobileCap.label}`}
                               >
                                 <div
                                   key={currentMobileCap.id}
-                                  className={`inline-flex items-center space-x-1.5 will-change-transform ${
-                                    isCapTransitioning
-                                      ? 'opacity-0 -translate-y-2.5 transition-all duration-180 ease-in'
-                                      : 'animate-cap-ticker'
-                                  }`}
+                                  className={`inline-flex items-center space-x-1.5 will-change-transform ${isCapTransitioning
+                                    ? 'opacity-0 -translate-y-2.5 transition-all duration-180 ease-in'
+                                    : 'animate-cap-ticker'
+                                    }`}
                                 >
                                   <Icon size={13.5} className={isActive ? 'text-[#0066FF] dark:text-blue-400' : 'text-slate-400'} />
                                   <span className="text-[12px] font-medium whitespace-nowrap">{currentMobileCap.label}</span>
@@ -1390,8 +1572,8 @@ export default function App() {
                                       type="button"
                                       onClick={() => handleSelectMobileCap(idx)}
                                       className={`transition-all duration-400 ease-out cursor-pointer ${isSelected
-                                          ? 'w-5 h-2 rounded-full bg-[#0066FF] dark:bg-blue-400 shadow-xs ring-2 ring-blue-500/20'
-                                          : 'w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-700 hover:bg-slate-400'
+                                        ? 'w-5 h-2 rounded-full bg-[#0066FF] dark:bg-blue-400 shadow-xs ring-2 ring-blue-500/20'
+                                        : 'w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-700 hover:bg-slate-400'
                                         }`}
                                       title={`Switch to ${cap.label}`}
                                     />
@@ -1459,6 +1641,13 @@ export default function App() {
                         })}
                       </div>
 
+                    </div>
+
+                    {/* Disclaimer PUSHED TO THE ABSOLUTE BOTTOM OF THE ENTIRE SCREEN VIA mt-auto */}
+                    <div className="mt-auto w-full pt-4 pb-1.5 text-center select-none">
+                      <p className="text-[11px] sm:text-[11.5px] text-slate-400 dark:text-slate-500 font-sans tracking-tight">
+                        Devnexes AI can make mistakes. Double check important info.
+                      </p>
                     </div>
                   </div>
                 )}
@@ -1540,7 +1729,7 @@ export default function App() {
                 localStorage.setItem('devnexes_canvas_code', newCode || '');
                 if (newLang) localStorage.setItem('devnexes_canvas_language', newLang);
               }
-            } catch {}
+            } catch { }
             setIdePanel(prev => ({
               ...prev,
               code: newCode,
@@ -1557,8 +1746,19 @@ export default function App() {
         isOpen={isApiKeyModalOpen}
         onClose={() => {
           setIsApiKeyModalOpen(false);
-          setHasApiKey(hasGroqApiKey() && hasGeminiApiKey());
+          setHasApiKey(hasGroqApiKey());
         }}
+      />
+
+      <MemoryStorageModal
+        isOpen={isMemoryModalOpen}
+        onClose={() => setIsMemoryModalOpen(false)}
+      />
+
+      <RagSourcesModal
+        isOpen={Boolean(selectedRagSources)}
+        onClose={() => setSelectedRagSources(null)}
+        sources={selectedRagSources}
       />
 
       <ArtifactModal

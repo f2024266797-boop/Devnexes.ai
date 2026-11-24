@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, memo, useMemo } from 'react';
 import MarkdownRenderer from './MarkdownRenderer';
 import FollowUpActionCard from './FollowUpActionCard';
+import { isUrduOrHindi } from '../utils/dynamicNLP';
 import {
   Globe,
   ChevronDown,
@@ -24,7 +25,9 @@ import {
   Palette,
   Layers,
   Workflow,
-  CheckCircle2
+  CheckCircle2,
+  FolderArchive,
+  FileText
 } from 'lucide-react';
 
 // ── Safe Favicon with Fallback Icon ─────────────────────────────
@@ -500,131 +503,118 @@ function TreeNodeVertex({ status, stageNumber }) {
   );
 }
 
-// ── Detects Urdu, Roman Urdu, or Hindi in user prompt ───────────
-function detectIsUrduOrHindi(text = '') {
-  if (!text || typeof text !== 'string') return false;
-  return /\b(kya|ha|hai|hain|karo|kardo|banao|bana|mujhe|tum|aap|ap|ka|ki|ke|ko|se|me|mein|ye|yeh|wo|woh|kripya|chahiye|dikhao|dikhayein|kuch|aur|par|pe|ik|ek|nahi|nhi|theek|sahi|porflio|tasveer|btao|batayein|kese|kaise|kyun|kab|kahan|kon|kaun|kis|kisko|kitna|kitni|mera|meri|mere)\b/i.test(text);
-}
+// ── Dynamic High-Taste Planning Status Phrases that cycle smoothly ──
+export const DYNAMIC_PLANNING_PHRASES_URDU = [
+  'Execution plan tayyar kiya ja raha hai...',
+  'Smart execution roadmap design ho raha hai...',
+  'Solution strategy formulate ki ja rahi hai...',
+  'Step-by-step action plan banaya ja raha hai...',
+  'Requirements samajh kar blueprint design ho raha hai...',
+  'Optimal approach formulate ho rahi hai...',
+  'Behtareen solution ka plan tayyar ho raha hai...',
+  'Intelligent execution steps arrange kiye ja rahe hain...',
+  'Task workflow optimize karke steps plan ho rahe hain...'
+];
 
-// ── Transforms complex technical jargon into simple, user-friendly language ──
-function toFriendlyStepName(name, type, isUrdu = false) {
+export const DYNAMIC_PLANNING_PHRASES_EN = [
+  'Planning execution steps...',
+  'Formulating intelligent execution plan...',
+  'Designing solution roadmap...',
+  'Synthesizing optimal action strategy...',
+  'Architecting step-by-step approach...',
+  'Structuring intelligent workflow...',
+  'Mapping high-precision execution plan...',
+  'Formulating optimal solution blueprint...'
+];
+
+// ── Transforms complex technical jargon into simple, user-friendly language dynamically ──
+function toFriendlyStepName(name, type, isUrdu = false, seed = 0) {
+  const phraseSeed = Math.abs(seed);
   if (!name || typeof name !== 'string') {
-    if (type === 'code' || type === 'artifact') return isUrdu ? 'Canvas me website/code banana' : 'Build code in Canvas';
-    if (type === 'search' || type === 'tool_search') return isUrdu ? 'Internet par search' : 'Search web';
-    if (type === 'vision') return isUrdu ? 'Image check karna' : 'Analyze image';
-    if (type === 'image') return isUrdu ? 'Image generate karna' : 'Generate image';
-    if (type === 'cmd' || type === 'terminal') return isUrdu ? 'Commands setup karna' : 'Setup & run commands';
-    return isUrdu ? 'Layout aur design ka plan' : 'Plan layout & design';
+    if (type === 'code' || type === 'artifact') {
+      const u = ['Clean code build', 'Solution code', 'Implementation', 'Code craft'];
+      const e = ['Build code', 'Craft implementation', 'Solution code', 'Engineering code'];
+      return isUrdu ? u[phraseSeed % u.length] : e[phraseSeed % e.length];
+    }
+    if (type === 'search' || type === 'tool_search') {
+      const u = ['Web search', 'Live sources search', 'Taaza maloomat lookup', 'Online search'];
+      const e = ['Search web', 'Live sources search', 'Online lookup', 'Web grounding'];
+      return isUrdu ? u[phraseSeed % u.length] : e[phraseSeed % e.length];
+    }
+    if (type === 'vision') return isUrdu ? 'Image ka tajziya' : 'Analyze image';
+    if (type === 'image') return isUrdu ? 'Image banana' : 'Generate image';
+    if (type === 'extract' || type === 'archive') return isUrdu ? 'Archive extract' : 'Extract archive';
+    if (type === 'file_read' || type === 'read' || type === 'files') {
+      const u = ['File parhna', 'File inspect karna', 'Content analysis'];
+      const e = ['Read file', 'Inspect file', 'Parse content'];
+      return isUrdu ? u[phraseSeed % u.length] : e[phraseSeed % e.length];
+    }
+    if (type === 'file_search') return isUrdu ? 'Codebase search' : 'Search files';
+    if (type === 'cmd' || type === 'terminal') return isUrdu ? 'Commands' : 'Commands';
+    if (type === 'understand') return isUrdu ? 'Request analyze ho raha hai' : 'Understanding request';
+    if (type === 'plan') {
+      const u = ['Action plan', 'Execution strategy', 'Solution roadmap', 'Blueprint'];
+      const e = ['Action plan', 'Execution roadmap', 'Solution blueprint', 'Strategy'];
+      return isUrdu ? u[phraseSeed % u.length] : e[phraseSeed % e.length];
+    }
+    if (type === 'think') {
+      const u = ['Logic & facts tajziya', 'Key points analysis', 'Smart evaluation', 'Requirements check'];
+      const e = ['Evaluating logic', 'Analyzing requirements', 'Synthesizing details', 'Context review'];
+      return isUrdu ? u[phraseSeed % u.length] : e[phraseSeed % e.length];
+    }
+    if (type === 'ask') return isUrdu ? 'Clarification darkar hai' : 'Asking user';
+    if (type === 'update') return isUrdu ? 'Status update' : 'Status update';
+    if (type === 'write') {
+      const u = ['Jawab finalize ho raha hai', 'Solution delivery', 'Final response'];
+      const e = ['Synthesizing response', 'Finalizing answer', 'Delivering solution'];
+      return isUrdu ? u[phraseSeed % u.length] : e[phraseSeed % e.length];
+    }
+    return isUrdu ? 'Smart tajziya' : 'Review & Plan';
   }
 
   let text = name.trim();
   text = text.replace(/^(?:Stage\s*\d+[:.-]?|\d+[.:])\s*/i, '');
-  const lower = text.toLowerCase();
 
-  if (isUrdu) {
-    if (type === 'code' || type === 'artifact' || lower.includes('code') || lower.includes('canvas') || lower.includes('implementation')) {
-      if (lower.includes('fix') || lower.includes('update') || lower.includes('modification') || lower.includes('incremental')) {
-        return 'Canvas me code update karna';
-      }
-      return 'Canvas me website/code banana';
-    }
-    if (type === 'search' || lower.includes('search') || lower.includes('grounding') || lower.includes('extraction')) {
-      return 'Internet par search karna';
-    }
-    if (type === 'vision' || lower.includes('vision') || lower.includes('ocr')) {
-      return 'Image check karna';
-    }
-    if (type === 'image' || lower.includes('image') || lower.includes('synthesis')) {
-      return 'Image generate karna';
-    }
-    if (type === 'cmd' || lower.includes('cli') || lower.includes('cmd') || lower.includes('runner')) {
-      return 'Commands setup karna';
-    }
-    if (lower.includes('architecture') || lower.includes('spec') || lower.includes('blueprint') || lower.includes('plan')) {
-      return 'Layout aur design ka plan';
-    }
-    return 'Analysis aur planning';
+  // Strip robotic internal execution phrases and provide attractive dynamic alternatives
+  if (/\b(?:executing step|kaam jari hai|processing step|running step)\b/i.test(text)) {
+    const u = ['Tajziya jari hai', 'Smart processing', 'Step execute ho raha hai', 'Solution build ho raha hai'];
+    const e = ['Processing request', 'Executing step', 'Analyzing details', 'Building solution'];
+    return isUrdu ? u[phraseSeed % u.length] : e[phraseSeed % e.length];
   }
 
-  // English friendly mappings
-  const directMappings = {
-    'portfolio architecture & component blueprint': 'Plan layout & structure',
-    'system architecture & schema blueprint': 'Plan layout & design',
-    'system architecture specification': 'Plan layout & design',
-    'architecture & layout blueprint': 'Plan layout & structure',
-    'architecture & component blueprint': 'Plan layout & structure',
-    'architecture blueprint': 'Plan layout & design',
-    'architecture specification': 'Plan layout & design',
-    'component blueprint': 'Plan layout & structure',
-    'system architecture': 'Plan layout & design',
-    'code modification & integration spec': 'Plan code update',
-    'incremental code implementation': 'Update code in Canvas',
-    'verified facts synthesis & architecture blueprint': 'Review facts & plan layout',
-    'factual verification & ground-truth synthesis': 'Review verified facts',
-    'root cause & fix diagnostic': 'Find error & plan fix',
-    'responsive portfolio implementation': 'Build portfolio website',
-    'modern ui/ux canvas implementation': 'Build modern UI in Canvas',
-    'executive portfolio canvas implementation': 'Build portfolio in Canvas',
-    'production web canvas implementation': 'Build website in Canvas',
-    'production canvas implementation': 'Build code in Canvas',
-    'full code implementation': 'Write application code',
-    'corrected code implementation': 'Fix and update code',
-    'local setup & dev server cli runner': 'Setup & run commands',
-    'real-time web search & fact finding': 'Search web for facts',
-    'real-time web grounding': 'Search web for information',
-    'ground-truth entity & linkedin data extraction': 'Search web for verified facts',
-    'search web for verified facts': 'Search web for verified facts',
-    'visual inspection & ocr analysis': 'Analyze image & text',
-    'visual inspection & ocr': 'Analyze image & text',
-    'visual composition & style engineering': 'Design image prompt',
-    'image synthesis': 'Generate image',
-    'cognitive strategy & execution blueprint': 'Plan & Approach'
-  };
-
-  if (directMappings[lower]) {
-    return directMappings[lower];
-  }
-
-  // Generalized user-friendly replacements
-  let clean = text
-    .replace(/\bCognitive Strategy & Execution Blueprint\b/gi, 'Plan & Approach')
-    .replace(/\bCognitive Strategy\b/gi, 'Plan')
-    .replace(/\bExecution Blueprint\b/gi, 'Plan')
-    .replace(/\bPortfolio Architecture & Component Blueprint\b/gi, 'Plan layout & structure')
-    .replace(/\bArchitecture & Component Blueprint\b/gi, 'Plan layout & structure')
-    .replace(/\bArchitecture & Layout Blueprint\b/gi, 'Plan layout & structure')
-    .replace(/\bArchitecture Blueprint\b/gi, 'Plan layout & design')
-    .replace(/\bArchitecture Specification\b/gi, 'Plan layout & design')
-    .replace(/\bComponent Blueprint\b/gi, 'Plan layout')
-    .replace(/\bSystem Architecture\b/gi, 'Plan layout & design')
-    .replace(/\bArchitecture\b/gi, 'Plan')
-    .replace(/\bBlueprint\b/gi, 'Plan')
-    .replace(/\bSpecification\b/gi, 'Plan')
-    .replace(/\bIncremental Code Implementation\b/gi, 'Update code in Canvas')
-    .replace(/\bCanvas Implementation\b/gi, 'Build in Canvas')
-    .replace(/\bCode Implementation\b/gi, 'Build code')
-    .replace(/\bImplementation\b/gi, 'Build')
-    .replace(/\bFix Diagnostic\b/gi, 'plan fix')
-    .replace(/\bDiagnostic\b/gi, 'Check')
-    .replace(/\bSynthesis\b/gi, 'Summary')
-    .replace(/\bGrounding\b/gi, 'Search')
-    .replace(/\bCLI Runner\b/gi, 'commands')
-    .replace(/\s{2,}/g, ' ')
+  // Strip long prompt instruction filler (e.g. "Obtain the exact Groq model ID for Qwen 3.8 27B to fill...")
+  text = text
+    .replace(/^(?:obtain|get|find|fetch|retrieve|check|execute|perform|analyze|extract)\s+(?:the\s+)?(?:exact\s+)?/i, '')
+    .replace(/\s+(?:to\s+fill|needed\s+to|from\s+the\s+user|in\s+the\s+html|in\s+the\s+settings).*$/i, '')
     .trim();
 
-  if (clean.length > 0) {
-    clean = clean.charAt(0).toUpperCase() + clean.slice(1);
+  // Keep it concise: maximum 4-5 words
+  const words = text.split(/\s+/);
+  if (words.length > 5) {
+    text = words.slice(0, 4).join(' ');
   }
 
-  return clean || text;
+  if (text.length > 0) {
+    text = text.charAt(0).toUpperCase() + text.slice(1);
+  }
+  return text || (isUrdu ? 'Smart tajziya' : 'Review & Approach');
 }
 
 function toFriendlyTypeBadge(type, lang) {
   if (type === 'code' || type === 'artifact') return lang ? lang.toUpperCase() : 'CODE';
   if (type === 'search' || type === 'tool_search') return 'SEARCH';
+  if (type === 'extract' || type === 'archive') return 'EXTRACT';
+  if (type === 'file_read' || type === 'read' || type === 'files') return 'READ';
+  if (type === 'file_search') return 'GREP';
   if (type === 'cmd' || type === 'terminal') return 'COMMANDS';
-  if (type === 'vision') return 'IMAGE';
+  if (type === 'vision') return 'VISION';
   if (type === 'image') return 'IMAGE';
+  if (type === 'understand') return 'UNDERSTAND';
+  if (type === 'plan') return 'PLAN';
+  if (type === 'think') return 'THINK';
+  if (type === 'ask') return 'ASK';
+  if (type === 'update') return 'UPDATE';
+  if (type === 'write') return 'WRITE';
   if (type === 'architecture' || type === 'analysis' || type === 'synthesis') return 'PLAN';
   return 'STEP';
 }
@@ -890,8 +880,8 @@ function StableDiffusionImageCard({
               }
             }}
             className={`relative z-10 object-contain rounded-xl shadow-2xl transition-transform duration-300 group-hover/img:scale-[1.012] ${imageObj.isOfficialBrand
-                ? 'max-h-[200px] sm:max-h-[240px] max-w-[240px] w-auto drop-shadow-md'
-                : 'max-h-[580px] w-auto max-w-full drop-shadow-2xl'
+              ? 'max-h-[200px] sm:max-h-[240px] max-w-[240px] w-auto drop-shadow-md'
+              : 'max-h-[580px] w-auto max-w-full drop-shadow-2xl'
               }`}
             loading="lazy"
           />
@@ -954,6 +944,7 @@ function StableDiffusionImageCard({
 }
 
 // ── Main Claude-Inspired AgentTraceTree Component with Native Tree (Zero Heavy Boxes) ──
+// Implements Agentic ReAct Pattern (Reason + Act + Observe)
 function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel, onOpenImageModal, userPrompt, onSendMessage, hasSubsequentFix = false }) {
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [expandedNodes, setExpandedNodes] = useState({});
@@ -979,10 +970,52 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
 
   if (!traceData || !traceData.steps) return null;
 
-  const isUrdu = detectIsUrduOrHindi(userPrompt || traceData.steps.map(s => `${s.task || ''} ${s.name || ''} ${s.content || ''}`).join(' '));
+  const isUrdu = isUrduOrHindi(userPrompt || traceData.steps.map(s => `${s.task || ''} ${s.name || ''} ${s.content || ''}`).join(' '));
   const pipelineSteps = traceData.steps.filter(s => s.type !== 'response' && s.type !== 'header');
   const responseStep = traceData.steps.find(s => s.type === 'response');
-  const executionNodes = pipelineSteps.filter(s => s.type !== 'thinking');
+  const rawNodes = pipelineSteps.filter(s => s.type !== 'thinking');
+
+  // Filter out redundant filler nodes (understand, plan, assumption, generic write/think)
+  // ONLY real, actionable tool steps (code, search, file read/search, extract, cmd, image, vision, ask, blueprint) are shown!
+  const executionNodes = useMemo(() => {
+    return rawNodes.filter((step, idx) => {
+      const type = (step.type || '').toLowerCase();
+      const name = (step.name || step.title || '').toLowerCase();
+
+      // 1. Remove useless filler/meta nodes
+      if (type === 'understand' || name.includes('samajh gaya') || name.includes('understanding request')) {
+        return false;
+      }
+      if (type === 'plan' || name.startsWith('plan tayyar') || name.startsWith('plan ready')) {
+        return false;
+      }
+      if (type === 'update' || name.includes('assumption') || name.includes('maan liya') || name.includes('continuing')) {
+        return false;
+      }
+      if (type === 'write' || name.includes('jawab tayyar') || name.includes('finalizing') || name.includes('response ready')) {
+        return false;
+      }
+
+      // 2. Pure 'think' nodes without real content or blueprint
+      if (type === 'think') {
+        const isBlueprint = name.includes('blueprint') || name.includes('architecture') || name.includes('specification');
+        const hasSubstantialSpec = step.content && (step.content.includes('#') || step.content.length > 250);
+        if (!isBlueprint || !hasSubstantialSpec) {
+          return false;
+        }
+      }
+
+      // 3. Deduplicate identical consecutive nodes
+      if (idx > 0) {
+        const prev = rawNodes[idx - 1];
+        const prevTitle = (prev.name || prev.title || '').trim().toLowerCase();
+        const curTitle = (step.name || step.title || '').trim().toLowerCase();
+        if (prevTitle && curTitle && prevTitle === curTitle && prev.type === step.type) return false;
+      }
+
+      return true;
+    });
+  }, [rawNodes]);
   const codeNode = pipelineSteps.find(s => s.type === 'code' || s.type === 'artifact');
   const imageNode = pipelineSteps.find(s => s.type === 'image' || s.imageResult);
   const hasCodeArtifact = !!(codeNode && codeNode.code);
@@ -990,67 +1023,106 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
   const isImageReady = Boolean(imageNode && imageNode.imageResult?.url);
   const showImageCard = Boolean(imageNode && (isImageGenerating || isImageReady || imageNode.status === 'error'));
 
+  const [phraseCycleIndex, setPhraseCycleIndex] = useState(0);
+
+  // Smoothly rotate the live planning phrase every 2.4s while executing and preparing steps
+  useEffect(() => {
+    if (!isExecuting || pipelineSteps.length > 0) return;
+    const interval = setInterval(() => {
+      setPhraseCycleIndex(prev => prev + 1);
+    }, 2400);
+    return () => clearInterval(interval);
+  }, [isExecuting, pipelineSteps.length]);
+
+  const promptSeed = useMemo(() => {
+    let hash = 0;
+    const str = (userPrompt || '') + (traceData?.id || '');
+    for (let i = 0; i < str.length; i++) {
+      hash = (hash << 5) - hash + str.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash);
+  }, [userPrompt, traceData?.id]);
+
+  const planningPhrase = useMemo(() => {
+    const list = isUrdu ? DYNAMIC_PLANNING_PHRASES_URDU : DYNAMIC_PLANNING_PHRASES_EN;
+    const idx = (promptSeed + phraseCycleIndex) % list.length;
+    return list[idx];
+  }, [isUrdu, promptSeed, phraseCycleIndex]);
+
   // Currently executing node detection (shows live animated step title instead of static thinking/thought seconds)
   const activeRunningStep = pipelineSteps.find(s => s.status === 'running' || s.isStreaming) ||
     pipelineSteps.find(s => s.status === 'pending');
   const activeRunningTitle = activeRunningStep
-    ? toFriendlyStepName(activeRunningStep.name || activeRunningStep.title, activeRunningStep.type, isUrdu)
-    : (isUrdu ? 'Execution plan tayyar ho raha hai...' : 'Planning execution steps...');
+    ? toFriendlyStepName(activeRunningStep.name || activeRunningStep.title, activeRunningStep.type, isUrdu, promptSeed)
+    : (isUrdu ? 'Jawab tayyar ho raha hai...' : 'Processing request...');
 
-  const completedCount = executionNodes.filter(s => s.status === 'completed').length;
-  const completedLabel = isUrdu
-    ? (completedCount > 0 ? (completedCount === 1 ? '1 marhala mukammal' : `${completedCount} marhale mukammal`) : 'Tayyar')
-    : (completedCount > 0 ? (completedCount === 1 ? '1 step completed' : `${completedCount} steps completed`) : 'Completed');
+  const completedLabel = useMemo(() => {
+    const count = executionNodes.length;
+    const urduOptions = [
+      `${count} marhale kamyabi se mukammal`,
+      `${count} marhale mukammal`,
+      `${count} steps mukammal hue`,
+      `${count} steps kamyabi se execute hue`
+    ];
+    const enOptions = [
+      `${count} steps completed`,
+      `${count} stages successfully executed`,
+      `${count} pipeline steps done`,
+      `${count} steps completed successfully`
+    ];
+    const list = isUrdu ? urduOptions : enOptions;
+    return list[promptSeed % list.length];
+  }, [executionNodes.length, isUrdu, promptSeed]);
 
   return (
     <div className="font-sans text-neutral-800 dark:text-neutral-200 my-1 w-full max-w-full overflow-hidden">
 
-      {/* ── Active Executing Node Header (Prominent size, crisp contrast & clear disclosure) ── */}
+      {/* ── Active Executing Node Header (Light, elegant size, crisp contrast & clear disclosure) ── */}
       {isExecuting ? (
-        <div className="mb-2 select-none">
+        <div className="mb-2 select-none animate-fade-in">
           <button
             type="button"
             onClick={() => setIsMinimized(prev => !prev)}
-            className="group inline-flex items-center gap-2 py-1.5 px-2.5 rounded-lg text-[16px] sm:text-[17px] hover:bg-neutral-100 dark:hover:bg-neutral-800/60 transition-colors font-sans cursor-pointer select-none"
+            className="group inline-flex items-center gap-2 py-1 px-2 rounded-lg text-[14px] sm:text-[14.5px] hover:bg-neutral-100 dark:hover:bg-neutral-800/60 transition-colors font-sans cursor-pointer select-none"
             title={isMinimized ? "Click to view execution tree" : "Click to collapse tree"}
           >
             <span
-              key={activeRunningTitle}
-              className="animate-blink-left-to-right font-medium tracking-tight truncate max-w-sm sm:max-w-lg animate-fade-in"
+              className="animate-blink-right-to-left font-normal tracking-normal truncate max-w-sm sm:max-w-lg"
             >
               {pipelineSteps.length === 0
-                ? (isUrdu ? 'Execution plan tayyar ho raha hai...' : 'Planning execution steps...')
+                ? planningPhrase
                 : `${activeRunningTitle}...`
               }
             </span>
             <ChevronRight
-              size={16}
-              className={`text-neutral-500 group-hover:text-neutral-800 dark:text-neutral-400 dark:group-hover:text-neutral-200 transition-transform duration-200 shrink-0 ${!isMinimized ? 'rotate-90' : ''}`}
+              size={14}
+              className={`text-neutral-400 group-hover:text-neutral-600 dark:text-neutral-500 dark:group-hover:text-neutral-300 transition-transform duration-200 shrink-0 ${!isMinimized ? 'rotate-90' : ''}`}
             />
           </button>
         </div>
-      ) : pipelineSteps.length > 0 ? (
-        <div className="mb-2 select-none">
+      ) : executionNodes.length > 0 ? (
+        <div className="mb-2 select-none animate-fade-in">
           <button
             type="button"
             onClick={() => setIsMinimized(prev => !prev)}
-            className="group inline-flex items-center gap-2 py-1.5 px-2.5 rounded-lg text-[16px] sm:text-[17px] font-medium text-neutral-700 hover:text-neutral-950 dark:text-neutral-300 dark:hover:text-white transition-colors font-sans cursor-pointer select-none"
+            className="group inline-flex items-center gap-2 py-1 px-2 rounded-lg text-[14px] sm:text-[14.5px] font-normal text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200 transition-colors font-sans cursor-pointer select-none"
             title={isMinimized ? "Click to view execution tree" : "Click to collapse tree"}
           >
-            <Check size={16} className="text-emerald-500 dark:text-emerald-400 shrink-0 stroke-[2.5]" />
-            <span className="font-medium tracking-tight">
+            <Check size={14} className="text-emerald-500 dark:text-emerald-400 shrink-0 stroke-[2.2]" />
+            <span className="font-normal tracking-normal text-neutral-500 dark:text-neutral-400">
               {completedLabel}
             </span>
             <ChevronRight
-              size={16}
-              className={`text-neutral-400 group-hover:text-neutral-700 dark:text-neutral-500 dark:group-hover:text-neutral-200 transition-transform duration-200 shrink-0 ${!isMinimized ? 'rotate-90' : ''}`}
+              size={14}
+              className={`text-neutral-400 group-hover:text-neutral-600 dark:text-neutral-500 dark:group-hover:text-neutral-300 transition-transform duration-200 shrink-0 ${!isMinimized ? 'rotate-90' : ''}`}
             />
           </button>
         </div>
       ) : null}
 
       {/* ── Expanded Native Nodes Tree (Zero Heavy Boxes, Pure Line Flow) ───── */}
-      {pipelineSteps.length > 0 && (
+      {executionNodes.length > 0 && (
         <div className={`accordion-grid ${!isMinimized ? 'open mb-3 sm:mb-4' : 'mb-0'}`}>
           <div className="accordion-grid-inner">
 
@@ -1111,7 +1183,7 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
                           <div className="flex items-center space-x-1.5 sm:space-x-2 min-w-0 flex-1">
                             <Code2 size={13.5} className="text-neutral-500 dark:text-neutral-400 group-hover:text-neutral-800 dark:group-hover:text-neutral-200 shrink-0" />
                             <span className="text-xs sm:text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200 group-hover:text-neutral-950 dark:group-hover:text-white truncate">
-                              {stageNum}. {toFriendlyStepName(step.name || step.title, 'code', isUrdu)}
+                              {toFriendlyStepName(step.name || step.title, 'code', isUrdu)}
                             </span>
                             <span className="px-1.5 py-0.2 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 font-mono text-[9px] uppercase border border-neutral-200 dark:border-neutral-700 shrink-0">
                               {toFriendlyTypeBadge(step.type, step.language)}
@@ -1121,7 +1193,7 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
                           <div className="flex items-center space-x-1.5 sm:space-x-2 text-[11px] shrink-0" onClick={e => e.stopPropagation()}>
                             {step.status === 'running' ? (
                               <span className="text-neutral-500 animate-pulse text-[10.5px] truncate max-w-[120px] sm:max-w-none">
-                                {isUrdu ? 'Gemini code likh raha hai...' : 'Generating code with Gemini...'}
+                                {isUrdu ? 'Code tayyar ho raha hai...' : 'Building code...'}
                               </span>
                             ) : (
                               <>
@@ -1203,6 +1275,159 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
                   );
                 }
 
+                // ── Workspace Archive Extraction Node (EXTRACT) ────
+                if (step.type === 'extract' || step.type === 'archive') {
+                  return (
+                    <div key={idx} className="relative animate-step-reveal py-0.5">
+                      <div className="absolute -left-[27px] sm:-left-[31px] top-0.5">
+                        <TreeNodeVertex status={step.status} stageNumber={stageNum} />
+                      </div>
+
+                      <div>
+                        <div
+                          onClick={() => toggleNodeExpand(idx)}
+                          className="flex items-center justify-between gap-x-3 gap-y-1 py-0.5 cursor-pointer group select-none"
+                        >
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <FolderArchive size={13.5} className="text-neutral-500 dark:text-neutral-400 group-hover:text-neutral-800 dark:group-hover:text-neutral-200 shrink-0" />
+                            <span className="text-xs sm:text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200 group-hover:text-neutral-950 dark:group-hover:text-white truncate">
+                              {toFriendlyStepName(step.name, 'extract', isUrdu)}
+                            </span>
+                            <span className="px-1.5 py-0.2 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 font-mono text-[9px] uppercase border border-neutral-200 dark:border-neutral-700 shrink-0">
+                              EXTRACT
+                            </span>
+                          </div>
+
+                          <div className="flex items-center space-x-2 text-[11px] shrink-0">
+                            {step.status === 'running' && (
+                              <span className="text-neutral-500 animate-pulse text-[10.5px]">
+                                {isUrdu ? 'Extract ho raha hai...' : 'Extracting archive...'}
+                              </span>
+                            )}
+                            {step.status === 'completed' && (
+                              <span className="text-neutral-400 font-mono text-[10.5px]">
+                                {step.filesCount ? `${step.filesCount} files` : (isUrdu ? 'Tayyar' : 'Ready')}
+                              </span>
+                            )}
+                            <span className="p-0.5 text-neutral-400">
+                              {isExpanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                            </span>
+                          </div>
+                        </div>
+
+                        {isExpanded && step.content && (
+                          <div className="mt-2.5 p-3 rounded-xl glass-card text-xs text-neutral-700 dark:text-neutral-300 font-mono whitespace-pre-wrap leading-relaxed">
+                            {step.content}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+
+                // ── Workspace Files Read & Tree Index Node (READ / FILE_READ) ──
+                if (step.type === 'read' || step.type === 'files' || step.type === 'file_read') {
+                  const isSpecificFile = Boolean(step.path);
+                  return (
+                    <div key={idx} className="relative animate-step-reveal py-0.5">
+                      <div className="absolute -left-[27px] sm:-left-[31px] top-0.5">
+                        <TreeNodeVertex status={step.status} stageNumber={stageNum} />
+                      </div>
+
+                      <div>
+                        <div
+                          onClick={() => toggleNodeExpand(idx)}
+                          className="flex items-center justify-between gap-x-3 gap-y-1 py-0.5 cursor-pointer group select-none"
+                        >
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <FileText size={13.5} className="text-neutral-500 dark:text-neutral-400 group-hover:text-neutral-800 dark:group-hover:text-neutral-200 shrink-0" />
+                            <span className="text-xs sm:text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200 group-hover:text-neutral-950 dark:group-hover:text-white truncate">
+                              {toFriendlyStepName(step.name, step.type, isUrdu)}
+                            </span>
+                            <span className="px-1.5 py-0.2 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 font-mono text-[9px] uppercase border border-neutral-200 dark:border-neutral-700 shrink-0">
+                              {toFriendlyTypeBadge(step.type)}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center space-x-2 text-[11px] shrink-0">
+                            {step.status === 'running' && (
+                              <span className="text-neutral-500 animate-pulse text-[10.5px]">
+                                {isUrdu ? 'File parh raha hoon...' : 'Reading file...'}
+                              </span>
+                            )}
+                            {step.status === 'completed' && (
+                              <span className="text-neutral-400 font-mono text-[10.5px]">
+                                {isSpecificFile
+                                  ? (step.totalChars ? `${Math.round(step.totalChars / 1024)} KB` : 'Read')
+                                  : (step.filesCount ? `${step.filesCount} files indexed` : 'Indexed')}
+                              </span>
+                            )}
+                            <span className="p-0.5 text-neutral-400">
+                              {isExpanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                            </span>
+                          </div>
+                        </div>
+
+                        {isExpanded && step.content && (
+                          <div className="mt-2.5 p-3 rounded-xl glass-card text-[11.5px] text-neutral-700 dark:text-neutral-300 font-mono whitespace-pre overflow-x-auto max-h-64 custom-scrollbar leading-relaxed">
+                            {step.content}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+
+                // ── Codebase Grep / File Search Node (FILE_SEARCH) ──
+                if (step.type === 'file_search') {
+                  return (
+                    <div key={idx} className="relative animate-step-reveal py-0.5">
+                      <div className="absolute -left-[27px] sm:-left-[31px] top-0.5">
+                        <TreeNodeVertex status={step.status} stageNumber={stageNum} />
+                      </div>
+
+                      <div>
+                        <div
+                          onClick={() => toggleNodeExpand(idx)}
+                          className="flex items-center justify-between gap-x-3 gap-y-1 py-0.5 cursor-pointer group select-none"
+                        >
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <Search size={13.5} className="text-neutral-500 dark:text-neutral-400 group-hover:text-neutral-800 dark:group-hover:text-neutral-200 shrink-0" />
+                            <span className="text-xs sm:text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200 group-hover:text-neutral-950 dark:group-hover:text-white truncate">
+                              {toFriendlyStepName(step.name, 'file_search', isUrdu)}
+                            </span>
+                            <span className="px-1.5 py-0.2 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 font-mono text-[9px] uppercase border border-neutral-200 dark:border-neutral-700 shrink-0">
+                              GREP
+                            </span>
+                          </div>
+
+                          <div className="flex items-center space-x-2 text-[11px] shrink-0">
+                            {step.status === 'running' && (
+                              <span className="text-neutral-500 animate-pulse text-[10.5px]">
+                                {isUrdu ? 'Files mein dhoond raha hoon...' : 'Searching files...'}
+                              </span>
+                            )}
+                            {step.status === 'completed' && step.matches && (
+                              <span className="text-neutral-400 font-mono text-[10.5px]">
+                                {step.matches.length} matches
+                              </span>
+                            )}
+                            <span className="p-0.5 text-neutral-400">
+                              {isExpanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                            </span>
+                          </div>
+                        </div>
+
+                        {isExpanded && step.content && (
+                          <div className="mt-2.5 p-3 rounded-xl glass-card text-[11.5px] text-neutral-700 dark:text-neutral-300 font-mono whitespace-pre overflow-x-auto max-h-64 custom-scrollbar leading-relaxed">
+                            {step.content}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+
                 // ── Search Node (Web Grounding, Zero Box) ─────────
                 if (step.type === 'search' || step.type === 'tool_search') {
                   return (
@@ -1219,7 +1444,7 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
                           <div className="flex items-center space-x-2 min-w-0">
                             <Search size={13.5} className="text-neutral-500 dark:text-neutral-400 group-hover:text-neutral-800 dark:group-hover:text-neutral-200 shrink-0" />
                             <span className="text-xs sm:text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200 group-hover:text-neutral-950 dark:group-hover:text-white truncate">
-                              {stageNum}. {toFriendlyStepName(step.name, 'search', isUrdu)}
+                              {toFriendlyStepName(step.name, 'search', isUrdu)}
                             </span>
                             <span className="px-1.5 py-0.2 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 font-mono text-[9px] uppercase border border-neutral-200 dark:border-neutral-700 shrink-0">
                               {toFriendlyTypeBadge(step.type)}
@@ -1288,7 +1513,7 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
                           <div className="flex items-center space-x-2 min-w-0">
                             <Terminal size={13.5} className="text-neutral-500 dark:text-neutral-400 group-hover:text-neutral-800 dark:group-hover:text-neutral-200 shrink-0" />
                             <span className="text-xs sm:text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200 group-hover:text-neutral-950 dark:group-hover:text-white truncate">
-                              {stageNum}. {toFriendlyStepName(step.name, 'cmd', isUrdu)}
+                              {toFriendlyStepName(step.name, 'cmd', isUrdu)}
                             </span>
                             <span className="px-1.5 py-0.2 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 font-mono text-[9px] uppercase border border-neutral-200 dark:border-neutral-700 shrink-0">
                               {toFriendlyTypeBadge(step.type)}
@@ -1329,7 +1554,7 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
                           <div className="flex items-center space-x-2 min-w-0">
                             <Eye size={13.5} className="text-neutral-500 dark:text-neutral-400 group-hover:text-neutral-800 dark:group-hover:text-neutral-200 shrink-0" />
                             <span className="text-xs sm:text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200 group-hover:text-neutral-950 dark:group-hover:text-white truncate">
-                              {stageNum}. {toFriendlyStepName(step.name, 'vision', isUrdu)}
+                              {toFriendlyStepName(step.name, 'vision', isUrdu)}
                             </span>
                             <span className="px-1.5 py-0.2 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 font-mono text-[9px] uppercase border border-neutral-200 dark:border-neutral-700 shrink-0">
                               {toFriendlyTypeBadge(step.type)}
@@ -1379,7 +1604,7 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
                           <div className="flex items-center space-x-2 min-w-0">
                             <Sparkles size={13.5} className="text-neutral-500 dark:text-neutral-400 group-hover:text-neutral-800 dark:group-hover:text-neutral-200 shrink-0" />
                             <span className="text-xs sm:text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200 group-hover:text-neutral-950 dark:group-hover:text-white truncate">
-                              {stageNum}. {toFriendlyStepName(step.name, 'image', isUrdu)}
+                              {toFriendlyStepName(step.name, 'image', isUrdu)}
                             </span>
                             <span className="px-1.5 py-0.2 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 font-mono text-[9px] uppercase border border-neutral-200 dark:border-neutral-700 shrink-0">
                               {toFriendlyTypeBadge(step.type)}
@@ -1530,7 +1755,7 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
                         <div className="flex items-center space-x-2 min-w-0">
                           <Compass size={13.5} className="text-neutral-500 dark:text-neutral-400 group-hover:text-neutral-800 dark:group-hover:text-neutral-200 shrink-0" />
                           <span className="text-xs sm:text-[12.5px] font-medium text-neutral-800 dark:text-neutral-200 group-hover:text-neutral-950 dark:group-hover:text-white truncate">
-                            {stageNum}. {toFriendlyStepName(step.name, 'analysis', isUrdu)}
+                            {toFriendlyStepName(step.name, 'analysis', isUrdu)}
                           </span>
                           <span className="px-1.5 py-0.2 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 font-mono text-[9px] uppercase border border-neutral-200 dark:border-neutral-700 shrink-0">
                             {toFriendlyTypeBadge(step.type)}
@@ -1554,11 +1779,17 @@ function AgentTraceTree({ traceData, isExecuting, onOpenPreview, onOpenIdePanel,
                       </div>
 
                       {isExpanded && step.content && (
-                        <ArchitecturalBlueprintWidget
-                          content={step.content}
-                          stepName={step.name}
-                          isExecuting={isExecuting && step.status === 'running'}
-                        />
+                        (step.type === 'architecture' || (step.name && (step.name.toLowerCase().includes('blueprint') || step.name.toLowerCase().includes('architecture')))) ? (
+                          <ArchitecturalBlueprintWidget
+                            content={step.content}
+                            stepName={step.name}
+                            isExecuting={isExecuting && step.status === 'running'}
+                          />
+                        ) : (
+                          <div className="mt-2 text-xs sm:text-[13px] text-neutral-600 dark:text-neutral-300 leading-relaxed bg-neutral-50 dark:bg-neutral-900/50 p-3 rounded-xl border border-neutral-200/80 dark:border-neutral-800">
+                            <MarkdownRenderer content={step.content} />
+                          </div>
+                        )
                       )}
                     </div>
                   </div>

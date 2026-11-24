@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
 import { formatActualModelName } from '../services/groqService';
+import { ingestWorkspaceFiles } from '../services/fileReaderService';
 import {
   Globe,
   Code2,
@@ -12,7 +13,10 @@ import {
   Brain,
   Zap,
   Square,
-  Sparkles
+  Sparkles,
+  FileText,
+  Loader2,
+  Paperclip
 } from 'lucide-react';
 
 const SLASH_COMMANDS = [
@@ -76,11 +80,14 @@ function ChatInput({
   onToggleWebSearch,
   isCanvasCodeActive,
   onToggleCanvasCode,
-  onStopGeneration
+  onStopGeneration,
+  hideDisclaimer = false
 }) {
   const [text, setText] = useState('');
   const [customClarText, setCustomClarText] = useState('');
   const [attachedImage, setAttachedImage] = useState(null);
+  const [attachedWorkspace, setAttachedWorkspace] = useState(null);
+  const [isProcessingFiles, setIsProcessingFiles] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isSlashMenuForced, setIsSlashMenuForced] = useState(false);
@@ -166,36 +173,54 @@ function ChatInput({
     }
   };
 
-  const handleProcessFile = (file) => {
-    if (!file || !file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setAttachedImage({
-        url: e.target.result,
-        name: file.name || 'Screenshot',
-        size: file.size ? `${Math.round(file.size / 1024)} KB` : ''
-      });
-    };
-    reader.readAsDataURL(file);
+  const handleProcessFiles = (fileList) => {
+    if (!fileList || !fileList.length) return;
+    const files = Array.from(fileList);
+
+    // If exactly 1 image file
+    if (files.length === 1 && files[0].type && files[0].type.startsWith('image/')) {
+      const file = files[0];
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setAttachedImage({
+          url: e.target.result,
+          name: file.name || 'Screenshot',
+          size: file.size ? `${Math.round(file.size / 1024)} KB` : ''
+        });
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    // Instant workspace attachment without blocking the input bar
+    const isZip = files.some(f => /\.(zip|rar|7z|tar\.gz|tgz)$/i.test(f.name));
+    const totalBytes = files.reduce((acc, f) => acc + (f.size || 0), 0);
+    const displayName = files.length === 1 ? files[0].name : `${files.length} files`;
+    setAttachedWorkspace({
+      name: displayName,
+      totalFiles: files.length,
+      totalSize: `${Math.round(totalBytes / 1024)} KB`,
+      isZip,
+      rawFiles: files
+    });
   };
 
   const handleFileChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) handleProcessFile(file);
+    const files = e.target.files;
+    if (files && files.length > 0) handleProcessFiles(files);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handlePaste = (e) => {
     const items = e.clipboardData?.items;
     if (!items) return;
+    const pastedFiles = [];
     for (let i = 0; i < items.length; i++) {
-      if (items[i].type.indexOf('image') !== -1) {
-        const blob = items[i].getAsFile();
-        if (blob) {
-          handleProcessFile(blob);
-          break;
-        }
-      }
+      const file = items[i].getAsFile();
+      if (file) pastedFiles.push(file);
+    }
+    if (pastedFiles.length > 0) {
+      handleProcessFiles(pastedFiles);
     }
   };
 
@@ -211,29 +236,43 @@ function ChatInput({
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) handleProcessFile(file);
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) handleProcessFiles(files);
   };
 
   const handleSubmit = (e) => {
     if (e) e.preventDefault();
     setIsSlashMenuForced(false);
     const cleanText = text.trim();
-    if ((!cleanText && !attachedImage) || isLoading) return;
+    if ((!cleanText && !attachedImage && !attachedWorkspace) || isLoading || isProcessingFiles) return;
 
-    const finalPrompt = cleanText || 'Please analyze this screenshot / image in full detail.';
+    let finalPrompt = cleanText;
+    if (!finalPrompt) {
+      if (attachedImage) finalPrompt = 'Please analyze this screenshot / image in full detail.';
+      else if (attachedWorkspace) finalPrompt = `Please analyze and explain the attached ${attachedWorkspace.name}.`;
+    }
+
     const finalImage = attachedImage ? attachedImage.url : null;
+    const finalWorkspace = attachedWorkspace ? attachedWorkspace.workspace : null;
+    const workspaceMeta = attachedWorkspace ? {
+      name: attachedWorkspace.name,
+      isZip: attachedWorkspace.isZip,
+      rawFiles: attachedWorkspace.rawFiles,
+      totalSize: attachedWorkspace.totalSize
+    } : null;
 
     onSendMessage(
       finalPrompt,
       finalImage,
-      activeClarification ? {
-        isClarificationAnswer: true,
-        question: activeClarification.question
-      } : null
+      {
+        ...(activeClarification ? { isClarificationAnswer: true, question: activeClarification.question } : {}),
+        workspace: finalWorkspace,
+        workspaceMeta
+      }
     );
     setText('');
     setAttachedImage(null);
+    setAttachedWorkspace(null);
     onDismissClarification?.();
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
   };
@@ -272,18 +311,18 @@ function ChatInput({
     }
   };
 
-  const canSend = (text.trim().length > 0 || !!attachedImage) && !isLoading;
+  const canSend = (text.trim().length > 0 || !!attachedImage || !!attachedWorkspace) && !isLoading && !isProcessingFiles;
   const currentModelObj = availableModels.find(m => m.id === selectedModel) || { name: formatActualModelName(selectedModel) || 'Connecting…' };
 
   return (
-    <div className="px-4 sm:px-5 md:px-6 pb-2 sm:pb-3.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-0.5 sm:pt-1 w-full max-w-[700px] sm:max-w-[750px] md:max-w-[800px] lg:max-w-[820px] mx-auto transition-all shrink-0 relative z-30">
+    <div className="px-4 sm:px-5 md:px-6 pb-1 sm:pb-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-0.5 sm:pt-1 w-full max-w-[720px] sm:max-w-[760px] md:max-w-[820px] lg:max-w-[840px] mx-auto transition-all shrink-0 relative z-30">
 
-      {/* Hidden file input for screenshot / image upload */}
+      {/* Hidden file input for multi-format file, zip and code upload */}
       <input
         type="file"
         ref={fileInputRef}
         onChange={handleFileChange}
-        accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+        multiple
         className="hidden"
       />
 
@@ -509,6 +548,41 @@ function ChatInput({
           </div>
         )}
 
+        {/* Attached Workspace / Document Files Preview Pill */}
+        {attachedWorkspace && (
+          <div className="mx-3.5 sm:mx-4 mt-2.5 p-1.5 pl-2.5 pr-2.5 rounded-xl bg-slate-100/90 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 flex items-center justify-between gap-2 max-w-sm animate-smooth-expand">
+            <div className="flex items-center space-x-2.5 min-w-0">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-100 dark:bg-blue-900/60 text-[#0066FF] dark:text-blue-300 flex items-center justify-center shrink-0">
+                <FileText size={16} />
+              </div>
+              <div className="min-w-0 truncate">
+                <p className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 truncate leading-tight">
+                  {attachedWorkspace.name}
+                </p>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                  {attachedWorkspace.totalFiles} {attachedWorkspace.totalFiles === 1 ? 'file' : 'files'} • {attachedWorkspace.totalSize}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAttachedWorkspace(null)}
+              className="p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+              title="Remove attached files"
+            >
+              <X size={13} />
+            </button>
+          </div>
+        )}
+
+        {/* File Ingestion Loading Spinner */}
+        {isProcessingFiles && (
+          <div className="mx-3.5 sm:mx-4 mt-2.5 p-2 rounded-xl bg-blue-50/80 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800/80 flex items-center space-x-2 text-xs text-[#0066FF] dark:text-blue-300 animate-pulse">
+            <Loader2 size={13} className="animate-spin shrink-0" />
+            <span>Reading, extracting and indexing files...</span>
+          </div>
+        )}
+
         {/* Textarea — Comfortable, generous vertical height and balanced proportion */}
         <textarea
           ref={textareaRef}
@@ -570,13 +644,13 @@ function ChatInput({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className={`w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-full flex items-center justify-center transition-colors bg-transparent border-0 cursor-pointer shrink-0 select-none text-xl font-normal leading-none hover:bg-slate-100 dark:hover:bg-slate-800/80 ${attachedImage
+              className={`w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-full flex items-center justify-center transition-colors bg-transparent border-0 cursor-pointer shrink-0 select-none text-xl font-normal leading-none hover:bg-slate-100 dark:hover:bg-slate-800/80 ${(attachedImage || attachedWorkspace)
                 ? 'text-[#0066FF] dark:text-blue-400 font-bold'
                 : isDarkMode
                   ? 'text-slate-400 hover:text-white'
                   : 'text-slate-500 hover:text-slate-900'
                 }`}
-              title="Attach image or screenshot"
+              title="Attach files, documents, archives or images"
             >
               <span className="mb-0.5">+</span>
             </button>
@@ -652,6 +726,15 @@ function ChatInput({
         </div>
       </div>
       </div>
+
+      {/* Subtle Bottom Disclaimer & Breathing Space */}
+      {!hideDisclaimer && (
+        <div className="pt-2 pb-1.5 text-center select-none">
+          <p className="text-[11px] sm:text-[11.5px] text-slate-400 dark:text-slate-500 font-sans tracking-tight">
+            Devnexes AI can make mistakes. Double check important info.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

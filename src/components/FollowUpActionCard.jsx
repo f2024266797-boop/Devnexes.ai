@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Sparkles, ArrowRight, Check, Wrench } from 'lucide-react';
 import { detectRequestedProgrammingLanguage } from '../services/agentOrchestrator';
+import { isUrduOrHindi } from '../utils/dynamicNLP';
 
 /**
  * Detects whether the assistant response represents an actionable scenario
@@ -15,26 +16,24 @@ function detectActionableScenario(assistantText = '', userPrompt = '', hasCodeAr
 
   const lowerAsst = assistantText.toLowerCase();
   const lowerUser = (userPrompt || '').toLowerCase();
-
-  const isUrdu = /\b(kya|ha|hai|hain|karo|kardo|banao|mujhe|aap|ap|ye|yeh|chahiye|nahi|nhi|ka|ki|ke|me|mein|ko)\b/i.test(lowerUser + ' ' + lowerAsst);
+  const isUrdu = isUrduOrHindi(userPrompt) || isUrduOrHindi(assistantText);
 
   // 2. Check if the assistant response already provides the fixed/corrected code
   const hasSubstantialCodeBlock = /```[a-zA-Z0-9_-]*\n[\s\S]{50,}\n```/.test(assistantText);
   const alreadyFixed = (
     hasSubstantialCodeBlock ||
-    /\b(corrected|fixed code|here is the corrected|here is the fixed|maine (code )?(theek|sahi|fix) kar diya|code ko fix kar diya|all defects resolved|all issues resolved|here is the complete fixed|has been corrected|following is the corrected|solution implementation|fixed implementation)\b/i.test(lowerAsst) ||
-    (/\b(fix|theek|sahi|correct|solve|debug)\b/i.test(lowerUser) && /\b(corrected|fixed|solution|update|resolved|here is)\b/i.test(lowerAsst))
+    /\b(corrected|fixed code|solution implementation|fixed implementation|all defects resolved|all issues resolved)\b/i.test(lowerAsst)
   );
 
   // 3. Code Error Diagnosis / Defect Breakdown / Bug Review
   // ONLY show when the assistant JUST identifies / explains the errors without having fixed them yet.
   const hasCodeDefects = (
-    /\b(defect|defects|diagnostic summary|syntax violation|runtime error|undefined behavior|undeclared identifier|compilation error|errors found|issues identified|bugs found|diagnostic breakdown|distinct defects)\b/i.test(lowerAsst) ||
-    (/\b(#include|def |function |const |int main|class |struct |var |let |cout <<|cin >>)\b/i.test(lowerUser) && /\b(error|errors|issue|issues|bug|bugs|fix|warning|fault)\b/i.test(lowerAsst))
+    /\b(defect|defects|syntax violation|runtime error|undefined behavior|compilation error|errors found|issues identified|bugs found|diagnostic breakdown)\b/i.test(lowerAsst) ||
+    (/\b(#include|def |function |const |int main|class |struct |var |let |cout <<|cin >>)\b/i.test(lowerUser) && /\b(error|errors|issue|issues|bug|bugs|warning|fault)\b/i.test(lowerAsst))
   );
 
   // If user already asked to fix, or code is already fixed/provided, don't ask again!
-  const userAlreadyAskedToFix = /\b(fix|theek|sahi|correct|solve|debug)\b/i.test(lowerUser);
+  const userAlreadyAskedToFix = /\b(fix|theek|thek|sahi|correct|solve|debug)\b/i.test(lowerUser);
 
   if (hasCodeDefects && !alreadyFixed && !userAlreadyAskedToFix) {
     const detectedLang = detectRequestedProgrammingLanguage(userPrompt, assistantText);
@@ -144,7 +143,8 @@ export default function FollowUpActionCard({
 
   const isAffirmative = (text) => {
     const clean = String(text || '').toLowerCase().trim().replace(/['"“”]/g, '');
-    return /^(yes|yeah|yep|yup|y|haan|ha|ji|ji haan|ji han|theek hai|ok|okay|sure|kardo|krdo|fix karo|theek karo|sahi karo|bilkul|solve karo)$/i.test(clean);
+    return hasFuzzyWord(clean, ['yes', 'yeah', 'yep', 'yup', 'haan', 'ha', 'ji', 'ok', 'okay', 'sure', 'kardo', 'krdo', 'fix', 'theek', 'thek', 'sahi', 'bilkul', 'solve', 'proceed', 'ahead'], 0.82, 1) ||
+      /^(y|ha|ji|ok)$/i.test(clean);
   };
 
   const dispatchAction = (input = '') => {
