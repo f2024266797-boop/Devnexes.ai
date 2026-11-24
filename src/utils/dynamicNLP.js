@@ -128,6 +128,9 @@ export function isWebsiteOrWebUiRequest(text = '') {
   const clean = text.trim();
   if (!clean) return false;
 
+  // If user is just asking an informational capability question (e.g. "website baana lyty ho?"), do not treat as build command!
+  if (isCapabilityInquiry(clean)) return false;
+
   // Native Urdu / Arabic script check
   if (/[\u0600-\u06FF]/.test(clean)) {
     if (/ویب\s*سائٹ|ویب|صفحہ|پورٹ\s*فولیو|لینڈنگ|ڈیش\s*بورڈ|آن\s*لائن\s*سٹور/.test(clean)) return true;
@@ -254,10 +257,20 @@ export function isCapabilityInquiry(text = '') {
   if (clean.includes('```') || clean.includes('{') || clean.includes('}') || clean.includes(';') || clean.includes('<!DOCTYPE')) return false;
 
   const lower = clean.toLowerCase();
-  const hasAbilityKeywords = /\b(?:can\s+you|are\s+you\s+able|could\s+you|kya\s+tum|kya\s+aap|kya\s+ap|kr\s*skty|kar\s*sakte|kar\s*skty|kr\s*sktay|kar\s*saktay|bana\s*skty|nikal\s*(?:ky|ke)?\s*d(?:y|e)?\s*s(?:k|ak)t(?:y|e)?|dhoond\s*skty|kr\s*dyte\s*ho|kar\s*dete\s*ho)\b/i.test(lower);
-  const isQuestion = lower.includes('?') || /\b(?:kya|can|could|how)\b/i.test(lower);
 
-  return hasAbilityKeywords && (isQuestion || clean.length < 50);
+  // Explicit ability/capability patterns (English & Roman Urdu phonetic variations)
+  const abilityPatterns = [
+    /\b(?:can\s+you|are\s+you\s+able|could\s+you)\b/i,
+    /\b(?:kya\s+tum|kya\s+aap|kya\s+ap)\b/i,
+    /\b(?:ba*na*|kr|kar|likh|dekh|check|nikal|dhoond)\s*(?:lyty|lete|leti|letay|lyte|dyte|dete|skt[yea]|sakt[yea]|sakty|sakte)\s*(?:ho|hain|han)?\b/i,
+    /\b(?:kr\s*dyte|kar\s*dete|kr\s*lete|kar\s*lyte|bana\s*lyte|baana\s*lyty|bana\s*lete|bna\s*lyty|bana\s*lyty)\s*(?:ho|hain|han)?\b/i,
+    /\b(?:bana\s*logy|bana\s*loge|kar\s*loge|kr\s*logy|bana\s*skty|kar\s*sakte)\b/i
+  ];
+
+  const hasAbilityKeywords = abilityPatterns.some(pattern => pattern.test(lower));
+  const isQuestion = lower.includes('?') || /\b(?:kya|can|could|how|kese|kaise)\b/i.test(lower) || /\b(?:ho|hain|han)\?*$/i.test(lower);
+
+  return hasAbilityKeywords && (isQuestion || clean.length < 60);
 }
 
 /**

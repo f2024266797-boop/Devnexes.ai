@@ -42,6 +42,7 @@ import {
   isUrduOrHindi,
   detectProgrammingLanguageDynamically,
   isWebsiteOrWebUiRequest,
+  isCapabilityInquiry,
   isRealApiKey
 } from '../utils/dynamicNLP.js';
 
@@ -1129,7 +1130,8 @@ async function startFlow({
     }
   }
 
-  const isWebsite = isWebsiteOrWebUiRequest(text);
+  const isCap = isCapabilityInquiry(text);
+  const isWebsite = !isCap && isWebsiteOrWebUiRequest(text);
 
   // Construct Intake Messages
   const msgs = [{ role: 'system', content: INTAKE_SYS }];
@@ -1144,6 +1146,7 @@ async function startFlow({
     `[image generation available: ${stabKey ? 'yes' : 'no'}]`,
     workspace ? `[attached files available: ${workspace.files?.length || 0}]` : null,
     noAsk ? '[Do not use MODE: ASK; assume sensibly]' : null,
+    isCap ? '[CAPABILITY QUESTION: User is asking if you can do something. Confirm warmly in MODE: GENERAL in 1 turn. NEVER use MODE: ASK or TASK.]' : null,
     isWebsite ? '[WEBSITE/UI INTENT DETECTED: Must use MODE: TASK with action "code". Do NOT use MODE: ASK. User wants the complete interactive HTML/CSS/JS website generated immediately.]' : null
   ].filter(Boolean).join(' ');
 
@@ -1287,9 +1290,12 @@ async function startFlow({
     }
   }
 
-  // Automatic Website Intent Guard: When user explicitly wants a website/UI created,
-  // NEVER stall on MODE: ASK or print partial chat prose in MODE: GENERAL. Route straight to MODE: TASK!
-  if (isWebsite && (mode === 'ASK' || mode === 'GENERAL' || !mode)) {
+  // Mode routing guards
+  if (isCap) {
+    // Capability inquiries (e.g. "website baana lyty ho?", "can you build a website?") are answered directly in 1 turn
+    mode = 'GENERAL';
+  } else if (isWebsite && (mode === 'ASK' || mode === 'GENERAL' || !mode)) {
+    // Explicit website build command: route straight to TASK for immediate full code generation
     mode = 'TASK';
     body = JSON.stringify({
       asks: [{ id: 'a1', text: `Build a complete, production-grade interactive HTML, CSS (Tailwind CDN), and JavaScript website for: ${text}`, type: 'task' }],
